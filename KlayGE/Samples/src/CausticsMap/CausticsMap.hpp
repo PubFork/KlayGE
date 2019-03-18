@@ -27,9 +27,13 @@ public:
 	{
 		return point_size_;
 	}
-	KlayGE::LightSourcePtr GetLightSource()
+	KlayGE::LightSourcePtr const& GetLightSource()
 	{
 		return light_;
+	}
+	KlayGE::SceneNodePtr const& GetLightNode()
+	{
+		return light_node_;
 	}
 	KlayGE::TexturePtr const & GetBackgroundDepthTex() const
 	{
@@ -82,6 +86,7 @@ private:
 	KlayGE::SceneObjectLightSourceProxyPtr light_proxy_;
 	KlayGE::LightSourcePtr light_;
 	KlayGE::LightSourcePtr dummy_light_;
+	KlayGE::SceneNodePtr light_node_;
 
 	KlayGE::TexturePtr y_cube_map_;
 	KlayGE::TexturePtr c_cube_map_;
@@ -116,6 +121,7 @@ private:
 	KlayGE::TexturePtr env_cube_tex_;
 	KlayGE::PostProcessPtr env_filter_pps_[6];
 	KlayGE::LightSourcePtr dummy_light_env_;
+	KlayGE::SceneNodePtr dummy_light_node_;
 
 	KlayGE::TexturePtr scene_texture_;
 	KlayGE::FrameBufferPtr scene_fb_;

@@ -168,8 +168,8 @@ namespace KlayGE
 
 				float4x4 proj_to_virtual_view = camera.InverseViewProjMatrix() * virtual_view;
 
-				float2 const & x_dir_2d = checked_pointer_cast<InfTerrainRenderable>(renderables_[0])->XDir();
-				float2 const & y_dir_2d = checked_pointer_cast<InfTerrainRenderable>(renderables_[0])->YDir();
+				float2 const & x_dir_2d = checked_pointer_cast<InfTerrainRenderable>(components_[0])->XDir();
+				float2 const & y_dir_2d = checked_pointer_cast<InfTerrainRenderable>(components_[0])->YDir();
 				float3 x_dir(x_dir_2d.x(), -camera.EyePos().y(), x_dir_2d.y());
 				float3 y_dir(y_dir_2d.x(), -camera.EyePos().y(), y_dir_2d.y());
 
@@ -210,7 +210,7 @@ namespace KlayGE
 						intersect = true;
 					}
 				}
-				checked_pointer_cast<InfTerrainRenderable>(renderables_[0])->OffsetY(sy);
+				checked_pointer_cast<InfTerrainRenderable>(components_[0])->OffsetY(sy);
 
 				this->Visible(intersect);
 			});
@@ -729,12 +729,12 @@ namespace KlayGE
 				RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 				Camera const & camera = *re.DefaultFrameBuffer()->GetViewport()->camera;
 
-				checked_pointer_cast<HQTerrainRenderable>(renderables_[0])->SetMatrices(camera);
+				checked_pointer_cast<HQTerrainRenderable>(components_[0])->SetMatrices(camera);
 
 				reset_terrain_ = reset_terrain_ || (last_eye_pos_ != camera.EyePos());
 				if (reset_terrain_)
 				{
-					checked_pointer_cast<HQTerrainRenderable>(renderables_[0])->FlushTerrainData();
+					checked_pointer_cast<HQTerrainRenderable>(components_[0])->FlushTerrainData();
 					reset_terrain_ = false;
 					last_eye_pos_ = camera.EyePos();
 				}

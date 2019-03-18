@@ -71,6 +71,8 @@ namespace
 	class ReceivePlane : public RenderablePlane
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		ReceivePlane(float length, float width)
 			: RenderablePlane(length, width, 1, 1, true, true)
 		{
@@ -97,22 +99,24 @@ namespace
 			BOOST_ASSERT(gen_cube_sm_tech_->Validate());
 		}
 
-		void BindLight(LightSourcePtr light)
+		void BindLight(LightSourcePtr const& light, SceneNodePtr const& light_node)
 		{
 			light_ = light;
+			light_node_ = light_node;
 		}
 
-		void CausticsLight(LightSourcePtr light)
+		void CausticsLight(LightSourcePtr const& light, SceneNodePtr const& light_node)
 		{
 			caustics_light_ = light;
+			caustics_light_node_ = light_node;
 		}
 
-		void SetSMTexture(TexturePtr sm_texture)
+		void SetSMTexture(TexturePtr const& sm_texture)
 		{
 			sm_texture_ = sm_texture;
 		}
 
-		void SetCausticsMap(TexturePtr caustics_map)
+		void SetCausticsMap(TexturePtr const& caustics_map)
 		{
 			caustics_map_ = caustics_map;
 		}
@@ -168,18 +172,20 @@ namespace
 			}
 			else if (Gen_Shadow_Pass == pass_)
 			{
-				float4x4 light_model = MathLib::to_matrix(light_->Rotation()) * MathLib::translation(light_->Position());
+				float4x4 light_model = light_node_->TransformToParent();
 				float4x4 inv_light_model = MathLib::inverse(light_model);
 
 				*(effect_->ParameterByName("obj_model_to_light_model")) = model * inv_light_model;
 			}
 			else
 			{
-				float4x4 light_model = MathLib::to_matrix(light_->Rotation()) * MathLib::translation(light_->Position());
+				float4x4 light_model = light_node_->TransformToParent();
 				float4x4 inv_light_model = MathLib::inverse(light_model);
 				float4x4 first_light_view = light_->SMCamera(0)->ViewMatrix();
 
-				*(effect_->ParameterByName("light_pos")) = float3(MathLib::transform(light_->Position(), MathLib::inverse(MathLib::rotation_x(DEG90))));
+				*(effect_->ParameterByName("light_pos")) =
+					MathLib::transform_coord(MathLib::transform_coord(float3(0, 0, 0), light_node_->TransformToParent()),
+						MathLib::rotation_x(-DEG90));
 				*(effect_->ParameterByName("light_color")) = float3(light_->Color());
 				*(effect_->ParameterByName("light_falloff")) = light_->Falloff();
 				*(effect_->ParameterByName("light_vp")) = caustics_light_->SMCamera(0)->ViewMatrix() * caustics_light_->SMCamera(0)->ProjMatrix();
@@ -200,7 +206,9 @@ namespace
 		RenderEffectPtr gen_cube_sm_effect_;
 		RenderTechnique* gen_cube_sm_tech_;
 		LightSourcePtr light_;
+		SceneNodePtr light_node_;
 		LightSourcePtr caustics_light_;
+		SceneNodePtr caustics_light_node_;
 		TexturePtr sm_texture_;
 		TexturePtr caustics_map_;
 	};
@@ -208,6 +216,8 @@ namespace
 	class RefractMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RefractMesh(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -233,9 +243,10 @@ namespace
 			BOOST_ASSERT(gen_cube_sm_tech_->Validate());
 		}
 
-		void BindLight(LightSourcePtr const & light)
+		void BindLight(LightSourcePtr const& light, SceneNodePtr const& light_node)
 		{
 			light_ = light;
+			light_node_ = light_node;
 		}
 
 		void SceneTexture(TexturePtr const & scene_texture)
@@ -277,7 +288,7 @@ namespace
 
 			case Gen_Shadow_Pass:
 				{
-					float4x4 light_model = MathLib::to_matrix(light_->Rotation()) * MathLib::translation(light_->Position());
+					float4x4 light_model = light_node_->TransformToParent();
 					float4x4 inv_light_model = MathLib::inverse(light_model);
 
 					*(scene_effect_->ParameterByName("obj_model_to_light_model")) = model_mat_ * inv_light_model;
@@ -362,6 +373,7 @@ namespace
 		RenderTechnique* gen_cube_sm_tech_;
 		uint32_t pass_;
 		LightSourcePtr light_;
+		SceneNodePtr light_node_;
 		TexturePtr scene_texture_;
 		CameraPtr env_cube_camera_;
 		TexturePtr env_cube_;
@@ -370,6 +382,8 @@ namespace
 	class CausticsGrid : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		CausticsGrid()
 			: Renderable(L"CausticsGrid")
 		{
@@ -468,7 +482,7 @@ namespace
 			float refract_idx = app.RefractIndex();
 			float3 absorption_idx = float3(0.1f, 0.1f, 0.1f);
 
-			float3 light_pos = app.GetLightSource()->Position();
+			float3 light_pos = MathLib::transform_coord(float3(0, 0, 0), app.GetLightNode()->TransformToParent());
 			float3 light_clr = app.GetLightSource()->Color();
 			float light_density = app.LightDensity();
 
@@ -546,29 +560,36 @@ void CausticsMapApp::OnCreate()
 	trackball_controller_.AttachCamera(this->ActiveCamera());
 	trackball_controller_.Scalers(0.05f, 0.1f);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
+	light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	light_node_->TransformToParent(MathLib::inverse(MathLib::look_at_lh(float3(0, 30, 0), float3(0, 0, 0), float3(0, 0, 1))));
+	root_node.AddChild(light_node_);
+
 	//Light
 	light_ = MakeSharedPtr<SpotLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(10, 10, 10));
 	light_->Falloff(float3(1, 0, 0.01f));
-	light_->Position(float3(0, 30, 0));
-	light_->Direction(MathLib::normalize(-light_->Position()));
 	light_->OuterAngle(PI / 8);
-	light_->AddToSceneManager();
+	light_node_->AddComponent(light_);
+
+	auto light_proxy = LoadLightSourceProxyModel(light_);
+	light_node_->AddChild(light_proxy->RootNode());
 
 	//dummy light for Shadow
 	dummy_light_ = MakeSharedPtr<PointLightSource>();
 	dummy_light_->Attrib(0);
 	dummy_light_->Color(light_->Color());
 	dummy_light_->Falloff(light_->Falloff());
-	dummy_light_->Position(light_->Position());
+	light_node_->AddComponent(dummy_light_);
 
 	//for env map generating
+	dummy_light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+	dummy_light_node_->TransformToParent(MathLib::translation(0.0f, 20.0f, 0.0f));
 	dummy_light_env_ = MakeSharedPtr<PointLightSource>();
-	dummy_light_env_->Position(float3(0.0f, 20.0f, 0.0f));
-
-	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(light_proxy_->RootNode());
+	dummy_light_node_->AddComponent(dummy_light_env_);
+	root_node.AddChild(dummy_light_node_);
 
 	//Input Bind
 	InputEngine& ie(Context::Instance().InputFactoryInstance().InputEngineInstance());
@@ -620,7 +641,7 @@ void CausticsMapApp::OnCreate()
 	y_cube_map_ = ASyncLoadTexture("uffizi_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
 	c_cube_map_ = ASyncLoadTexture("uffizi_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
 	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_map_, c_cube_map_);
+	sky_box_->FirstComponentOfType<RenderableSkyBox>()->CompressedCubeMap(y_cube_map_, c_cube_map_);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
 
 	copy_pp_ = SyncLoadPostProcess("Copy.ppml", "Copy");
@@ -942,7 +963,7 @@ uint32_t CausticsMapApp::DoUpdate(uint32_t pass)
 	//Pass 0 ~ 3 Caustics Map
 	if (0 == pass)
 	{
-		dummy_light_env_->Position(refract_model_->RootNode()->PosBoundWS().Center());
+		dummy_light_node_->TransformToParent(MathLib::translation(refract_model_->RootNode()->PosBoundWS().Center()));
 
 		if (depth_texture_support_)
 		{
@@ -1134,13 +1155,13 @@ uint32_t CausticsMapApp::DoUpdate(uint32_t pass)
 		plane_obj_->Visible(true);
 
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsPass(Gen_Shadow_Pass);
-		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_);
+		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_, light_node_);
 		refract_model_->ForEachMesh([this](Renderable& mesh)
 			{
 				auto& refract_mesh = *checked_cast<RefractMesh*>(&mesh);
 
 				refract_mesh.CausticsPass(Gen_Shadow_Pass);
-				refract_mesh.BindLight(dummy_light_);
+				refract_mesh.BindLight(dummy_light_, light_node_);
 			});
 
 		re.BindFrameBuffer(shadow_cube_buffer_);
@@ -1170,8 +1191,8 @@ uint32_t CausticsMapApp::DoUpdate(uint32_t pass)
 		sky_box_->Visible(true);
 
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsPass(Default_Pass);
-		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_);
-		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsLight(light_);
+		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_, light_node_);
+		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsLight(light_, light_node_);
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->SetSMTexture(shadow_cube_tex_);
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->SetCausticsMap(caustics_texture_filtered_);
 
@@ -1195,8 +1216,8 @@ uint32_t CausticsMapApp::DoUpdate(uint32_t pass)
 		sky_box_->Visible(true);
 
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsPass(Default_Pass);
-		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_);
-		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsLight(light_);
+		checked_pointer_cast<ReceivePlane>(plane_renderable_)->BindLight(dummy_light_, light_node_);
+		checked_pointer_cast<ReceivePlane>(plane_renderable_)->CausticsLight(light_, light_node_);
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->SetSMTexture(shadow_cube_tex_);
 		checked_pointer_cast<ReceivePlane>(plane_renderable_)->SetCausticsMap(caustics_texture_filtered_);
 

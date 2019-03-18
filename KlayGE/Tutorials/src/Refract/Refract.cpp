@@ -38,6 +38,8 @@ namespace
 	class RefractorRenderable : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RefractorRenderable(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -168,10 +170,10 @@ void Refract::OnCreate()
 	refractor_ = MakeSharedPtr<SceneNode>(refractor_model_->Mesh(0), SceneNode::SOA_Cullable);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(refractor_);
 
-	checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->CompressedCubeMap(y_cube_map_, c_cube_map_);
+	refractor_->FirstComponentOfType<RefractorRenderable>()->CompressedCubeMap(y_cube_map_, c_cube_map_);
 
 	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_map_, c_cube_map_);
+	sky_box_->FirstComponentOfType<RenderableSkyBox>()->CompressedCubeMap(y_cube_map_, c_cube_map_);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
@@ -292,7 +294,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(backface_buffer_);
 			re.CurFrameBuffer()->AttachedDsv()->ClearDepth(0.0f);
 
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->Pass(PT_TransparencyBackGBufferMRT);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->Pass(PT_TransparencyBackGBufferMRT);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -302,7 +304,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(backface_depth_buffer_);
 			re.CurFrameBuffer()->AttachedDsv()->ClearDepth(0.0f);
 
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->Pass(PT_GenShadowMap);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->Pass(PT_GenShadowMap);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -317,9 +319,9 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(FrameBufferPtr());
 			re.CurFrameBuffer()->AttachedDsv()->ClearDepth(1.0f);
 
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->Pass(PT_TransparencyFrontShading);
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->BackFaceTexture(backface_tex_);
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->BackFaceDepthTexture(backface_depth_tex_);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->Pass(PT_TransparencyFrontShading);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->BackFaceTexture(backface_tex_);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->BackFaceDepthTexture(backface_depth_tex_);
 
 			sky_box_->Visible(true);
 			return App3DFramework::URV_NeedFlush | App3DFramework::URV_Finished;
@@ -329,7 +331,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			// Pass 1: Render backface's normal and depth
 			re.BindFrameBuffer(backface_buffer_);
 
-			checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->Pass(PT_TransparencyBackGBufferMRT);
+			refractor_->FirstComponentOfType<RefractorRenderable>()->Pass(PT_TransparencyBackGBufferMRT);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -341,9 +343,9 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 		re.BindFrameBuffer(FrameBufferPtr());
 		re.CurFrameBuffer()->AttachedDsv()->ClearDepth(1.0f);
 
-		checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->Pass(PT_TransparencyFrontShading);
-		checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->BackFaceTexture(backface_tex_);
-		checked_pointer_cast<RefractorRenderable>(refractor_->GetRenderable())->BackFaceDepthTexture(backface_depth_tex_);
+		refractor_->FirstComponentOfType<RefractorRenderable>()->Pass(PT_TransparencyFrontShading);
+		refractor_->FirstComponentOfType<RefractorRenderable>()->BackFaceTexture(backface_tex_);
+		refractor_->FirstComponentOfType<RefractorRenderable>()->BackFaceDepthTexture(backface_depth_tex_);
 
 		sky_box_->Visible(true);
 		return App3DFramework::URV_NeedFlush | App3DFramework::URV_Finished;

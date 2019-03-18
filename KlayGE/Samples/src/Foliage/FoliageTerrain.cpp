@@ -41,6 +41,8 @@ namespace KlayGE
 	class FoliageMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit FoliageMesh(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -77,6 +79,8 @@ namespace KlayGE
 	class FoliageImpostorMesh : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit FoliageImpostorMesh(AABBox const & aabbox)
 			: Renderable(L"FoliageImpostor")
 		{

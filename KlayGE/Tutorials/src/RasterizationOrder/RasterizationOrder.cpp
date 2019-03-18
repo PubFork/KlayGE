@@ -36,6 +36,8 @@ namespace
 	class RenderQuad : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderQuad()
 			: Renderable(L"RasterizationOrder")
 		{

@@ -24,8 +24,8 @@ private:
 
 	KlayGE::FirstPersonCameraController fpcController_;
 
-	KlayGE::SceneObjectLightSourceProxyPtr light_proxy_;
 	KlayGE::LightSourcePtr light_;
+	KlayGE::SceneNodePtr light_node_;
 };
 
 #endif		// _DISTANCEMAPPING_HPP

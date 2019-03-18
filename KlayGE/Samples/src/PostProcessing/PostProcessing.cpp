@@ -37,14 +37,24 @@ using namespace KlayGE;
 
 namespace
 {
-	class PointLightSourceUpdate
+	class PointLightNodeUpdate
 	{
 	public:
-		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
+		explicit PointLightNodeUpdate(SceneNode& node) : node_(node)
 		{
-			float4x4 inv_view = Context::Instance().AppInstance().ActiveCamera().InverseViewMatrix();
-			light.Position(MathLib::transform_coord(float3(2, 2, -3), inv_view));
 		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(app_time);
+			KFL_UNUSED(elapsed_time);
+
+			float4x4 const inv_view = Context::Instance().AppInstance().ActiveCamera().InverseViewMatrix();
+			node_.TransformToParent(MathLib::translation(MathLib::transform_coord(float3(2, 2, -3), inv_view)));
+		}
+
+	private:
+		SceneNode& node_;
 	};
 
 	enum
@@ -109,18 +119,22 @@ void PostProcessingApp::OnCreate()
 	re.PPAAEnabled(0);
 	re.ColorGradingEnabled(false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
-	point_light_ = MakeSharedPtr<PointLightSource>();
-	point_light_->Attrib(LightSource::LSA_NoShadow);
-	point_light_->Color(float3(18, 18, 18));
-	point_light_->Position(float3(0, 0, 0));
-	point_light_->Falloff(float3(1, 0, 1));
-	point_light_->BindUpdateFunc(PointLightSourceUpdate());
-	point_light_->AddToSceneManager();
+	auto point_light = MakeSharedPtr<PointLightSource>();
+	point_light->Attrib(LightSource::LSA_NoShadow);
+	point_light->Color(float3(18, 18, 18));
+	point_light->Falloff(float3(1, 0, 1));
+
+	auto light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+	light_node->AddComponent(point_light);
+	light_node->OnMainThreadUpdate().Connect(PointLightNodeUpdate(*light_node));
+	root_node.AddChild(light_node);
 
 	fpcController_.Scalers(0.05f, 0.1f);
 
@@ -219,9 +233,9 @@ void PostProcessingApp::OnCreate()
 		});
 	this->CartoonHandler(*dialog_->Control<UIRadioButton>(id_cartoon_));
 	
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableSkyBox>();
+	sky_box->CompressedCubeMap(y_cube, c_cube);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
 	color_fb_ = rf.MakeFrameBuffer();
 	color_fb_->GetViewport()->camera = re.CurFrameBuffer()->GetViewport()->camera;

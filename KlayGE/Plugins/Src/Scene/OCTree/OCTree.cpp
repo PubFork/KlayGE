@@ -52,6 +52,8 @@ namespace
 	class NodeRenderable : public RenderableLineBox
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		NodeRenderable()
 			: RenderableLineBox(AABBox(float3(-1, -1, -1), float3(1, 1, 1)), Color(1, 1, 1, 1))
 		{

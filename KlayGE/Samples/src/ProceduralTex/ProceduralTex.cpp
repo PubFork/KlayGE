@@ -34,6 +34,8 @@ namespace
 	class RenderPolygon : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RenderPolygon(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -238,15 +240,20 @@ uint32_t ProceduralTexApp::DoUpdate(uint32_t /*pass*/)
 			light_->Attrib(0);
 			light_->Color(float3(2, 2, 2));
 			light_->Falloff(float3(1, 0, 1.0f));
-			light_->Position(float3(0.25f, 0.5f, -1.0f));
-			light_->AddToSceneManager();
 
-			light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-			light_proxy_->Scaling(0.01f, 0.01f, 0.01f);
+			light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+			light_node_->TransformToParent(MathLib::translation(0.25f, 0.5f, -1.0f));
+			light_node_->AddComponent(light_);
+
+			auto light_proxy = LoadLightSourceProxyModel(light_);
+			light_proxy->RootNode()->TransformToParent(
+				MathLib::scaling(0.01f, 0.01f, 0.01f) * light_proxy->RootNode()->TransformToParent());
+			light_node_->AddChild(light_proxy->RootNode());
+
 			{
 				auto& scene_mgr = Context::Instance().SceneManagerInstance();
 				std::lock_guard<std::mutex> lock(scene_mgr.MutexForUpdate());
-				scene_mgr.SceneRootNode().AddChild(light_proxy_->RootNode());
+				scene_mgr.SceneRootNode().AddChild(light_node_);
 			}
 
 			loading_percentage_ = 80;
@@ -318,13 +325,15 @@ uint32_t ProceduralTexApp::DoUpdate(uint32_t /*pass*/)
 		float3 light_pos(0.25f, 0.5f, -1.0f);
 		light_pos = MathLib::transform_coord(light_pos, this->ActiveCamera().InverseViewMatrix());
 		light_pos = MathLib::normalize(light_pos) * 1.2f;
-		light_->Position(light_pos);
+		light_node_->TransformToParent(MathLib::translation(light_pos));
 
-		polygon_model_->ForEachMesh([this](Renderable& mesh)
+		polygon_model_->ForEachMesh([this, light_pos](Renderable& mesh)
 			{
-				checked_cast<RenderPolygon*>(&mesh)->LightPos(light_->Position());
-				checked_cast<RenderPolygon*>(&mesh)->LightColor(light_->Color());
-				checked_cast<RenderPolygon*>(&mesh)->LightFalloff(light_->Falloff());
+				auto& polygon_mesh = *checked_cast<RenderPolygon*>(&mesh);
+
+				polygon_mesh.LightPos(light_pos);
+				polygon_mesh.LightColor(light_->Color());
+				polygon_mesh.LightFalloff(light_->Falloff());
 			});
 
 		return App3DFramework::URV_NeedFlush | App3DFramework::URV_Finished;

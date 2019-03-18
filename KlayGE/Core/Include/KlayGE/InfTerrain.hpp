@@ -27,6 +27,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API InfTerrainRenderable : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		InfTerrainRenderable(std::wstring_view name, uint32_t num_grids = 256, float stride = 1, float increate_rate = 1.012f);
 		virtual ~InfTerrainRenderable();
 
@@ -156,6 +158,8 @@ namespace KlayGE
 		};
 
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit HQTerrainRenderable(RenderEffectPtr const & effect,
 			float world_scale = 800, float vertical_scale = 2.5f, int world_uv_repeats = 8);
 		virtual ~HQTerrainRenderable()

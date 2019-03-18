@@ -34,6 +34,8 @@ namespace
 	class RenderFractal : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderFractal()
 			: Renderable(L"Fractal")
 		{

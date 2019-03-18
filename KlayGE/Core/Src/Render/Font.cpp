@@ -70,6 +70,8 @@ namespace KlayGE
 	class FontRenderable : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit FontRenderable(std::shared_ptr<KFont> const & kfl)
 				: Renderable(L"Font"),
 					three_dim_(false),

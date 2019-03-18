@@ -25,6 +25,7 @@
 #include <KFL/ArrayRef.hpp>
 #include <vector>
 #include <KlayGE/RenderMaterial.hpp>
+#include <KlayGE/SceneComponent.hpp>
 
 namespace KlayGE
 {
@@ -117,9 +118,11 @@ namespace KlayGE
 	}
 
 	// Abstract class defining the interface all renderable objects must implement.
-	class KLAYGE_CORE_API Renderable : boost::noncopyable
+	class KLAYGE_CORE_API Renderable : public SceneComponent
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((SceneComponent))
+
 		enum EffectAttribute
 		{
 			EA_SpecialShading = 1UL << 0,
@@ -165,7 +168,7 @@ namespace KlayGE
 
 		virtual void AddToRenderQueue();
 
-		virtual void Render();
+		virtual void Render() override;
 
 		template <typename Iterator>
 		void AssignInstances(Iterator begin, Iterator end)
@@ -199,9 +202,6 @@ namespace KlayGE
 			return true;
 		}
 		bool AllHWResourceReady() const;
-
-		bool Enabled() const;
-		void Enabled(bool enabled);
 
 		// For select mode
 
@@ -275,8 +275,6 @@ namespace KlayGE
 		std::vector<RenderLayoutPtr> rls_;
 
 		int32_t active_lod_ = 0;
-
-		bool enabled_ = true;
 
 		// For select mode
 

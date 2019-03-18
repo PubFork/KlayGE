@@ -37,6 +37,8 @@ namespace
 	class RenderableFoggySkyBox : public RenderableSkyBox
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((RenderableSkyBox))
+
 		RenderableFoggySkyBox()
 		{
 			RenderEffectPtr effect = SyncLoadRenderEffect("FoggySkyBox.fxml");
@@ -97,16 +99,21 @@ void FoliageApp::OnCreate()
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 	deferred_rendering_->SSVOEnabled(0, false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	auto ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
-	sun_light_ = MakeSharedPtr<DirectionalLightSource>();
-	sun_light_->Attrib(LightSource::LSA_NoShadow);
-	sun_light_->Direction(float3(0.267835f, -0.0517653f, -0.960315f));
-	sun_light_->Color(float3(3, 3, 3));
-	sun_light_->AddToSceneManager();
+	sun_light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	auto sun_light = MakeSharedPtr<DirectionalLightSource>();
+	sun_light->Attrib(LightSource::LSA_NoShadow);
+	sun_light->Color(float3(3, 3, 3));
+	sun_light_node_->TransformToParent(
+		MathLib::to_matrix(MathLib::axis_to_axis(float3(0, 0, 1), float3(0.267835f, -0.0517653f, -0.960315f))));
+	sun_light_node_->AddComponent(sun_light);
+	root_node.AddChild(sun_light_node_);
 	
 	Color fog_color(0.61f, 0.52f, 0.62f, 1);
 	if (Context::Instance().Config().graphics_cfg.gamma)
@@ -126,16 +133,16 @@ void FoliageApp::OnCreate()
 	terrain_renderable->TextureScale(1, float2(1, 1));
 	terrain_renderable->TextureScale(2, float2(3, 3));
 	terrain_renderable->TextureScale(3, float2(11, 11));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(terrain_);
+	root_node.AddChild(terrain_);
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableFoggySkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->FogColor(fog_color);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableFoggySkyBox>();
+	sky_box->CompressedCubeMap(y_cube, c_cube);
+	sky_box->FogColor(fog_color);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
-	sun_flare_ = MakeSharedPtr<LensFlareSceneObject>();
-	checked_pointer_cast<LensFlareSceneObject>(sun_flare_)->Direction(float3(-0.267835f, 0.0517653f, 0.960315f));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sun_flare_);
+	auto sun_flare = MakeSharedPtr<LensFlareSceneObject>();
+	sun_flare->Direction(MathLib::transform_normal(float3(0, 0, -1), sun_light_node_->TransformToParent()));
+	root_node.AddChild(sun_flare);
 
 	fog_pp_ = SyncLoadPostProcess("Fog.ppml", "fog");
 	fog_pp_->SetParam(1, float3(fog_color.r(), fog_color.g(), fog_color.b()));
@@ -144,7 +151,7 @@ void FoliageApp::OnCreate()
 	deferred_rendering_->AtmosphericPostProcess(fog_pp_);
 
 	light_shaft_pp_ = MakeSharedPtr<LightShaftPostProcess>();
-	light_shaft_pp_->SetParam(1, sun_light_->Color());
+	light_shaft_pp_->SetParam(1, sun_light->Color());
 
 	fpcController_.Scalers(0.05f, 1.0f);
 
@@ -233,11 +240,11 @@ void FoliageApp::DoUpdateOverlay()
 		<< deferred_rendering_->NumVerticesRendered() << " Vertices";
 	font_->RenderText(0, 36, Color(1, 1, 1, 1), stream.str(), 16);
 
-	if (!checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->UseDrawIndirect())
+	if (!terrain_->FirstComponentOfType<ProceduralTerrain>()->UseDrawIndirect())
 	{
 		stream.str(L"");
-		stream << checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->Num3DPlants() << " 3D plants "
-			<< checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->NumImpostorPlants() << " impostor plants";
+		stream << terrain_->FirstComponentOfType<ProceduralTerrain>()->Num3DPlants() << " 3D plants "
+			<< terrain_->FirstComponentOfType<ProceduralTerrain>()->NumImpostorPlants() << " impostor plants";
 		font_->RenderText(0, 54, Color(1, 1, 1, 1), stream.str(), 16);
 	}
 }
@@ -249,7 +256,8 @@ uint32_t FoliageApp::DoUpdate(uint32_t pass)
 	{
 		if (light_shaft_on_)
 		{
-			light_shaft_pp_->SetParam(0, -sun_light_->Direction() * 10000.0f + this->ActiveCamera().EyePos());
+			light_shaft_pp_->SetParam(0, -MathLib::transform_normal(float3(0, 0, 1), sun_light_node_->TransformToParent()) * 10000.0f +
+											this->ActiveCamera().EyePos());
 			light_shaft_pp_->InputPin(0, deferred_rendering_->PrevFrameResolvedShadingTex(0));
 			light_shaft_pp_->InputPin(1, deferred_rendering_->PrevFrameResolvedDepthTex(0));
 			light_shaft_pp_->Apply();

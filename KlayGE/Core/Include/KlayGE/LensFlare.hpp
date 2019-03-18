@@ -23,6 +23,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API LensFlareRenderable : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		LensFlareRenderable();
 
 		void FlareParam(std::vector<float3> const & param, float alpha_fac);

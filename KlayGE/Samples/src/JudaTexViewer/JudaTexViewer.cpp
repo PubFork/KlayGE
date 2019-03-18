@@ -47,6 +47,8 @@ namespace
 	class RenderTile : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderTile()
 			: Renderable(L"Tile")
 		{
@@ -95,6 +97,8 @@ namespace
 	class RenderGridBorder : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderGridBorder()
 			: Renderable(L"Grid")
 		{
@@ -191,8 +195,8 @@ void JudaTexViewer::OnCreate()
 	grid_border_renderable_ = MakeSharedPtr<RenderGridBorder>();
 
 	node_ = MakeSharedPtr<SceneNode>(0);
-	node_->AddRenderable(tile_renderable_);
-	node_->AddRenderable(grid_border_renderable_);
+	node_->AddComponent(tile_renderable_);
+	node_->AddComponent(grid_border_renderable_);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(node_);
 
 	this->OpenJudaTex("klayge_logo.jdt");

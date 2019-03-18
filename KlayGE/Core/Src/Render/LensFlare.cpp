@@ -127,7 +127,7 @@ namespace KlayGE
 		// update flare
 		if (angle > FLARE_RENDERANGLE)
 		{
-			renderables_[0]->Enabled(true);
+			components_[0]->Enabled(true);
 
 			// get angle amount by current angle
 			float angle_amount = 1 - (1 - angle) / (1 - FLARE_RENDERANGLE);	// convert angle to percent 
@@ -159,11 +159,11 @@ namespace KlayGE
 				flare_param[flare] = float3(flare_pos.x(), flare_pos.y(), scale_fac);
 			}
 
-			checked_pointer_cast<LensFlareRenderable>(renderables_[0])->FlareParam(flare_param, alpha_fac);
+			checked_pointer_cast<LensFlareRenderable>(components_[0])->FlareParam(flare_param, alpha_fac);
 		}
 		else
 		{
-			renderables_[0]->Enabled(false);
+			components_[0]->Enabled(false);
 		}
 	}
 }

@@ -27,8 +27,6 @@ private:
 
 	KlayGE::FontPtr font_;
 
-	KlayGE::SceneNodePtr sky_box_;
-
 	KlayGE::FirstPersonCameraController fpcController_;
 	KlayGE::TrackballCameraController light_controller_;
 	KlayGE::Camera light_ctrl_camera_;
@@ -42,8 +40,6 @@ private:
 	int id_pssm_factor_static_;
 	int id_pssm_factor_slider_;
 	int id_ctrl_camera_;
-
-	KlayGE::LightSourcePtr sun_light_;
 
 	KlayGE::uint32_t num_cascades_;
 	float pssm_factor_;

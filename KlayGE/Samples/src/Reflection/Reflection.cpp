@@ -33,6 +33,8 @@ namespace
 	class ReflectMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit ReflectMesh(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -156,6 +158,8 @@ namespace
 	class DinoMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit DinoMesh(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -230,24 +234,29 @@ void ScreenSpaceReflectionApp::OnCreate()
 	screen_camera_path_->AttachCamera(this->ActiveCamera());
 	this->ActiveCamera().AddToSceneManager();
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube_, c_cube_);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
-	point_light_ = MakeSharedPtr<PointLightSource>();
-	point_light_->Attrib(LightSource::LSA_NoShadow);
-	point_light_->Color(float3(1, 1, 1));
-	point_light_->Position(float3(0, 3, -2));
-	point_light_->Falloff(float3(1, 0, 0.3f));
-	point_light_->AddToSceneManager();
+	auto point_light = MakeSharedPtr<PointLightSource>();
+	point_light->Attrib(LightSource::LSA_NoShadow);
+	point_light->Color(float3(1, 1, 1));
+	point_light->Falloff(float3(1, 0, 0.3f));
+
+	auto point_light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	point_light_node->TransformToParent(MathLib::translation(0.0f, 3.0f, -2.0f));
+	point_light_node->AddComponent(point_light);
+	root_node.AddChild(point_light_node);
 
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 
 	font_ = SyncLoadFont("gkai00mp.kfont");
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	sky_box_ = MakeSharedPtr<RenderableSkyBox>();
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box_, SceneNode::SOA_NotCastShadow));
 
 	back_refl_fb_ = rf.MakeFrameBuffer();
 
@@ -331,7 +340,7 @@ void ScreenSpaceReflectionApp::MinSampleNumHandler(KlayGE::UISlider const & send
 	int32_t sample_num = sender.GetValue();
 	if (teapot_)
 	{
-		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->MinSamples(sample_num);
+		teapot_->FirstComponentOfType<ReflectMesh>()->MinSamples(sample_num);
 
 		std::wostringstream oss;
 		oss << "Min Samples: " << sample_num;
@@ -344,7 +353,7 @@ void ScreenSpaceReflectionApp::MaxSampleNumHandler(KlayGE::UISlider const & send
 	int32_t sample_num = sender.GetValue();
 	if (teapot_)
 	{
-		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->MaxSamples(sample_num);
+		teapot_->FirstComponentOfType<ReflectMesh>()->MaxSamples(sample_num);
 
 		std::wostringstream oss;
 		oss << "Max Samples: " << sample_num;
@@ -357,7 +366,7 @@ void ScreenSpaceReflectionApp::EnbleReflectionHandler(KlayGE::UICheckBox const &
 	bool enabled = sender.GetChecked();
 	if (teapot_)
 	{
-		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->EnbleReflection(enabled);
+		teapot_->FirstComponentOfType<ReflectMesh>()->EnbleReflection(enabled);
 	}
 }
 
@@ -404,8 +413,8 @@ uint32_t ScreenSpaceReflectionApp::DoUpdate(KlayGE::uint32_t pass)
 			{
 				if (y_cube_->HWResourceReady() && c_cube_->HWResourceReady())
 				{
-					checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_, c_cube_);
-					checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->SkyBox(y_cube_, c_cube_);
+					checked_cast<RenderableSkyBox*>(sky_box_.get())->CompressedCubeMap(y_cube_, c_cube_);
+					teapot_->FirstComponentOfType<ReflectMesh>()->SkyBox(y_cube_, c_cube_);
 
 					loading_percentage_ = 100;
 				}
@@ -418,18 +427,19 @@ uint32_t ScreenSpaceReflectionApp::DoUpdate(KlayGE::uint32_t pass)
 			float3 eye = screen_camera_->EyePos();
 			float3 at = screen_camera_->LookAt();
 
-			float3 center = MathLib::transform_coord(teapot_->GetRenderable()->PosBound().Center(), teapot_->TransformToWorld());
+			float3 center =
+				MathLib::transform_coord(teapot_->FirstComponentOfType<ReflectMesh>()->PosBound().Center(), teapot_->TransformToWorld());
 			float3 direction = eye - at;
 
 			back_camera->ViewParams(center, center + direction, screen_camera_->UpVec());
 			back_camera->ProjParams(PI / 2, 1, screen_camera_->NearPlane(), screen_camera_->FarPlane());
 
-			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackCamera(back_camera);
+			teapot_->FirstComponentOfType<ReflectMesh>()->BackCamera(back_camera);
 
-			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->FrontReflectionTex(deferred_rendering_->PrevFrameResolvedShadingTex(1));
-			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->FrontReflectionDepthTex(deferred_rendering_->PrevFrameResolvedDepthTex(1));
-			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackReflectionTex(deferred_rendering_->CurrFrameResolvedShadingTex(0));
-			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackReflectionDepthTex(deferred_rendering_->CurrFrameResolvedDepthTex(0));
+			teapot_->FirstComponentOfType<ReflectMesh>()->FrontReflectionTex(deferred_rendering_->PrevFrameResolvedShadingTex(1));
+			teapot_->FirstComponentOfType<ReflectMesh>()->FrontReflectionDepthTex(deferred_rendering_->PrevFrameResolvedDepthTex(1));
+			teapot_->FirstComponentOfType<ReflectMesh>()->BackReflectionTex(deferred_rendering_->CurrFrameResolvedShadingTex(0));
+			teapot_->FirstComponentOfType<ReflectMesh>()->BackReflectionDepthTex(deferred_rendering_->CurrFrameResolvedDepthTex(0));
 		}
 	}
 

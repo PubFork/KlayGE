@@ -39,6 +39,8 @@ namespace
 	class TerrainRenderable : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		TerrainRenderable()
 			: Renderable(L"Terrain")
 		{

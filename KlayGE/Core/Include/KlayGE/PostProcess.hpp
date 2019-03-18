@@ -39,6 +39,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API PostProcess : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		PostProcess(std::wstring_view name, bool volumetric);
 		PostProcess(std::wstring_view name, bool volumetric,
 			ArrayRef<std::string> param_names,

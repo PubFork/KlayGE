@@ -35,6 +35,8 @@ namespace
 	class RenderPolygon : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderPolygon()
 			: Renderable(L"Polygon")
 		{
@@ -176,16 +178,23 @@ namespace
 	};
 
 
-	class PointLightSourceUpdate
+	class PointLightNodeUpdate
 	{
 	public:
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		explicit PointLightNodeUpdate(SceneNode& node) : node_(node)
 		{
-			float4x4 matRot = MathLib::rotation_z(app_time);
-
-			float3 light_pos(1, 0, -1);
-			light.Position(MathLib::transform_coord(light_pos, matRot));
 		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(elapsed_time);
+
+			float4x4 const mat_rot = MathLib::rotation_z(app_time);
+			node_.TransformToParent(MathLib::translation(MathLib::transform_coord(float3(1, 0, -1), mat_rot)));
+		}
+
+	private:
+		SceneNode& node_;
 	};
 
 
@@ -233,17 +242,22 @@ void DistanceMapping::OnCreate()
 	fpcController_.AttachCamera(this->ActiveCamera());
 	fpcController_.Scalers(0.05f, 0.1f);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<PointLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(2, 2, 2));
 	light_->Falloff(float3(1, 0, 1.0f));
-	light_->Position(float3(1, 0, -1));
-	light_->BindUpdateFunc(PointLightSourceUpdate());
-	light_->AddToSceneManager();
 
-	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-	light_proxy_->Scaling(0.05f, 0.05f, 0.05f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(light_proxy_->RootNode());
+	auto light_proxy = LoadLightSourceProxyModel(light_);
+	light_proxy->RootNode()->TransformToParent(MathLib::scaling(0.05f, 0.05f, 0.05f) * light_proxy->RootNode()->TransformToParent());
+
+	light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+	light_node_->TransformToParent(MathLib::translation(1.0f, 0.0f, -1.0f));
+	light_node_->AddComponent(light_);
+	light_node_->AddChild(light_proxy->RootNode());
+	light_node_->OnMainThreadUpdate().Connect(PointLightNodeUpdate(*light_node_));
+	root_node.AddChild(light_node_);
 
 	checked_pointer_cast<RenderPolygon>(polygon_renderable_)->LightFalloff(light_->Falloff());
 
@@ -318,7 +332,8 @@ uint32_t DistanceMapping::DoUpdate(uint32_t /*pass*/)
 	}
 	renderEngine.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 
-	checked_pointer_cast<RenderPolygon>(polygon_renderable_)->LightPos(light_->Position());
+	checked_pointer_cast<RenderPolygon>(polygon_renderable_)
+		->LightPos(MathLib::transform_coord(float3(0, 0, 0), light_node_->TransformToParent()));
 	checked_pointer_cast<RenderPolygon>(polygon_renderable_)->LightColor(light_->Color());
 	checked_pointer_cast<RenderPolygon>(polygon_renderable_)->LightFalloff(light_->Falloff());
 

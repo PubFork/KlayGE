@@ -24,8 +24,6 @@ private:
 
 	KlayGE::FontPtr font_;
 	KlayGE::SceneNodePtr terrain_;
-	KlayGE::SceneNodePtr sky_box_;
-	KlayGE::SceneNodePtr sun_flare_;
 	KlayGE::FirstPersonCameraController fpcController_;
 
 	KlayGE::DeferredRenderingLayer* deferred_rendering_;
@@ -39,7 +37,7 @@ private:
 	int id_light_shaft_;
 	int id_fps_camera_;
 
-	KlayGE::LightSourcePtr sun_light_;
+	KlayGE::SceneNodePtr sun_light_node_;
 };
 
 #endif		// _FOLIAGE_HPP

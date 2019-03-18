@@ -34,8 +34,9 @@
 #pragma once
 
 #include <KlayGE/PreDeclare.hpp>
-#include <KlayGE/RenderLayout.hpp>
 #include <KlayGE/Renderable.hpp>
+#include <KlayGE/RenderLayout.hpp>
+#include <KlayGE/SceneComponent.hpp>
 #include <KlayGE/Signal.hpp>
 
 namespace KlayGE
@@ -56,8 +57,8 @@ namespace KlayGE
 	public:
 		explicit SceneNode(uint32_t attrib);
 		SceneNode(std::wstring_view name, uint32_t attrib);
-		SceneNode(RenderablePtr const & renderable, uint32_t attrib);
-		SceneNode(RenderablePtr const & renderable, std::wstring_view name, uint32_t attrib);
+		SceneNode(SceneComponentPtr const& component, uint32_t attrib);
+		SceneNode(SceneComponentPtr const& component, std::wstring_view name, uint32_t attrib);
 		virtual ~SceneNode();
 
 		std::wstring_view Name() const;
@@ -80,15 +81,68 @@ namespace KlayGE
 
 		void Traverse(std::function<bool(SceneNode&)> const & callback);
 
-		uint32_t NumRenderables() const;
-		RenderablePtr const & GetRenderable() const;
-		RenderablePtr const & GetRenderable(uint32_t i) const;
+		uint32_t NumComponents() const;
+		template <typename T>
+		uint32_t NumComponentsOfType() const
+		{
+			uint32_t ret = 0;
+			for (auto const& component : components_)
+			{
+				if (boost::typeindex::runtime_cast<T*>(component.get()) != nullptr)
+				{
+					++ret;
+				}
+			}
+			return ret;
+		}
+		SceneComponent* FirstComponent();
+		SceneComponent const* FirstComponent() const;
+		SceneComponent* ComponentByIndex(uint32_t i);
+		SceneComponent const* ComponentByIndex(uint32_t i) const;
+		template <typename T>
+		T* FirstComponentOfType()
+		{
+			for (auto const& component : components_)
+			{
+				T* casted = boost::typeindex::runtime_cast<T*>(component.get());
+				if (casted != nullptr)
+				{
+					return casted;
+				}
+			}
+			return nullptr;
+		}
+		template <typename T>
+		T const* FirstComponentOfType() const
+		{
+			for (auto const& component : components_)
+			{
+				T const* casted = boost::typeindex::runtime_cast<T*>(component.get());
+				if (casted != nullptr)
+				{
+					return casted;
+				}
+			}
+			return nullptr;
+		}
 
-		void AddRenderable(RenderablePtr const & renderable);
-		void DelRenderable(RenderablePtr const & renderable);
-		void ClearRenderables();
+		void AddComponent(SceneComponentPtr const& component);
+		void RemoveComponent(SceneComponentPtr const& component);
+		void ClearComponents();
 
-		void ForEachRenderable(std::function<void(Renderable&)> const & callback) const;
+		void ForEachComponent(std::function<void(SceneComponent&)> const & callback) const;
+		template <typename T>
+		void ForEachComponentOfType(std::function<void(T&)> const & callback) const
+		{
+			for (auto const& component : components_)
+			{
+				T* casted = boost::typeindex::runtime_cast<T*>(component.get());
+				if (casted != nullptr)
+				{
+					callback(*casted);
+				}
+			}
+		}
 
 		virtual void TransformToParent(float4x4 const & mat);
 		virtual void TransformToWorld(float4x4 const & mat);
@@ -151,7 +205,7 @@ namespace KlayGE
 		SceneNode* parent_ = nullptr;
 		std::vector<SceneNodePtr> children_;
 
-		std::vector<RenderablePtr> renderables_;
+		std::vector<SceneComponentPtr> components_;
 		std::vector<VertexElement> instance_format_;
 
 		float4x4 xform_to_parent_  = float4x4::Identity();

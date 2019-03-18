@@ -15,6 +15,8 @@ namespace KlayGE
 	class ProceduralTerrain : public HQTerrainRenderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((HQTerrainRenderable))
+
 		ProceduralTerrain();
 
 		void ReflectionPlane(Plane const & plane);

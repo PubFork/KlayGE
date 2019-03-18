@@ -407,7 +407,7 @@ namespace KlayGE
 		void PostGenerateGBuffer(PerViewport const & pvp);
 		void BuildLinearDepthMipmap(PerViewport const & pvp);
 		void RenderDecals(PerViewport const & pvp, PassType pass_type);
-		void PrepareLightCamera(PerViewport const & pvp, LightSource const & light,
+		void PrepareLightCamera(PerViewport const & pvp, LightSource const & light, SceneNode const& light_node,
 			int32_t index_in_pass, PassType pass_type);
 		void PostGenerateShadowMap(PerViewport const & pvp, int32_t org_no, int32_t index_in_pass);
 		void UpdateShadowing(PerViewport const & pvp);
@@ -514,7 +514,7 @@ namespace KlayGE
 
 		LightSourcePtr default_ambient_light_;
 		LightSourcePtr merged_ambient_light_;
-		std::vector<LightSource*> lights_;
+		std::vector<std::pair<LightSource*, SceneNode const*>> lights_;
 		std::vector<RenderablePtr> decals_;
 
 		std::vector<std::shared_ptr<DeferredRenderingJob>> jobs_;

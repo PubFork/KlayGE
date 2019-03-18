@@ -90,6 +90,8 @@ namespace KlayGE
 	class UIRectRenderable : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		UIRectRenderable(TexturePtr const & texture, RenderEffectPtr const & effect)
 			: Renderable(L"UIRect"),
 				texture_(texture)

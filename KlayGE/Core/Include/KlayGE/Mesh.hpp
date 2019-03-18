@@ -59,6 +59,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API StaticMesh : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit StaticMesh(std::wstring_view name);
 
 		void BuildMeshInfo(RenderModel const & model);
@@ -372,6 +374,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API SkinnedMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit SkinnedMesh(std::wstring_view name);
 
 		AABBox FramePosBound(uint32_t frame) const;
@@ -404,6 +408,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableLightSourceProxy : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RenderableLightSourceProxy(std::wstring_view name);
 
 		void Technique(RenderEffectPtr const & effect, RenderTechnique* tech) override;
@@ -433,6 +439,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableCameraProxy : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RenderableCameraProxy(std::wstring_view name);
 
 		void Technique(RenderEffectPtr const & effect, RenderTechnique* tech) override;

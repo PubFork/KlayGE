@@ -55,7 +55,7 @@ namespace KlayGE
 		}
 
 		virtual void UpdateGBuffer(Camera const & vp_camera) = 0;
-		virtual void UpdateRSM(Camera const & rsm_camera, LightSource const & light) = 0;
+		virtual void UpdateRSM(Camera const & rsm_camera, LightSource const& light, SceneNode const& light_node) = 0;
 		virtual void CalcIndirectLighting(TexturePtr const & prev_shading_tex, float4x4 const & proj_to_prev) = 0;
 
 	protected:
@@ -71,12 +71,12 @@ namespace KlayGE
 		virtual void RSM(TexturePtr const & rt0_tex, TexturePtr const & rt1_tex, TexturePtr const & depth_tex) override;
 
 		virtual void UpdateGBuffer(Camera const & vp_camera) override;
-		virtual void UpdateRSM(Camera const & rsm_camera, LightSource const & light) override;
+		virtual void UpdateRSM(Camera const& rsm_camera, LightSource const& light, SceneNode const& light_node) override;
 		virtual void CalcIndirectLighting(TexturePtr const & prev_shading_tex, float4x4 const & proj_to_prev) override;
 
 	private:
 		void ExtractVPLs(Camera const & rsm_camera, LightSource const & light);
-		void VPLsLighting(LightSource const & light);
+		void VPLsLighting(LightSource const& light, SceneNode const& light_node);
 
 	private:
 		MultiResLayerPtr multi_res_layer_;
@@ -118,7 +118,7 @@ namespace KlayGE
 		virtual void RSM(TexturePtr const & rt0_tex, TexturePtr const & rt1_tex, TexturePtr const & depth_tex) override;
 
 		virtual void UpdateGBuffer(Camera const & vp_camera) override;
-		virtual void UpdateRSM(Camera const & rsm_camera, LightSource const & light) override;
+		virtual void UpdateRSM(Camera const& rsm_camera, LightSource const& light, SceneNode const& light_node) override;
 		virtual void CalcIndirectLighting(TexturePtr const & prev_shading_tex, float4x4 const & proj_to_prev) override;
 
 	private:

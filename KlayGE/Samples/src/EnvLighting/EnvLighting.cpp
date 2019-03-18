@@ -47,6 +47,8 @@ namespace
 	class SphereRenderable : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit SphereRenderable(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -59,19 +61,14 @@ namespace
 			techs_[5] = effect_->TechniqueByName("GroundTruth");
 			this->RenderingType(0);
 
-			SceneManager& sm = Context::Instance().SceneManagerInstance();
-			for (uint32_t i = 0; i < sm.NumLights(); ++ i)
 			{
-				LightSourcePtr const & light = sm.GetLight(i);
-				if (LightSource::LT_Ambient == light->Type())
-				{
-					*(effect_->ParameterByName("skybox_Ycube_tex")) = light->SkylightTexY();
-					*(effect_->ParameterByName("skybox_Ccube_tex")) = light->SkylightTexC();
+				auto* ambient_light = Context::Instance().SceneManagerInstance().SceneRootNode().FirstComponentOfType<AmbientLightSource>();
 
-					uint32_t const mip = light->SkylightTexY()->NumMipMaps();
-					*(effect_->ParameterByName("diff_spec_mip")) = int2(mip - 1, mip - 2);
-					break;
-				}
+				*(effect_->ParameterByName("skybox_Ycube_tex")) = ambient_light->SkylightTexY();
+				*(effect_->ParameterByName("skybox_Ccube_tex")) = ambient_light->SkylightTexC();
+
+				uint32_t const mip = ambient_light->SkylightTexY()->NumMipMaps();
+				*(effect_->ParameterByName("diff_spec_mip")) = int2(mip - 1, mip - 2);
 			}
 
 			// From https://github.com/BIDS/colormap/blob/master/parula.py
@@ -897,9 +894,11 @@ void EnvLightingApp::OnCreate()
 		integrated_brdf_sw_tex->CopyToTexture(*integrated_brdf_tex_);
 	}
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube_map, c_cube_map);
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
 	sphere_group_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sphere_group_);
@@ -944,9 +943,9 @@ void EnvLightingApp::OnCreate()
 		sphere_group_->AddChild(sphere_models_[i]->RootNode());
 	}
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_map, c_cube_map);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableSkyBox>();
+	sky_box->CompressedCubeMap(y_cube_map, c_cube_map);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
 	this->LookAt(float3(0.0f, 0.0f, -0.8f), float3(0, 0, 0));
 	this->Proj(0.05f, 100);

@@ -36,6 +36,8 @@ namespace
 	class RenderTeapot : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RenderTeapot(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -127,8 +129,7 @@ void VectorTexApp::OnCreate()
 	object_ = MakeSharedPtr<SceneNode>(model_->Mesh(0), SceneNode::SOA_Cullable);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(object_);
 
-	checked_pointer_cast<RenderTeapot>(object_->GetRenderable())->VectorTexture(
-		ASyncLoadTexture("Drawing.dds", EAH_GPU_Read | EAH_Immutable));
+	object_->FirstComponentOfType<RenderTeapot>()->VectorTexture(ASyncLoadTexture("Drawing.dds", EAH_GPU_Read | EAH_Immutable));
 
 	UIManager::Instance().Load(ResLoader::Instance().Open("VideoTexture.uiml"));
 }

@@ -1406,21 +1406,21 @@ namespace KlayGE
 		lights_.clear();
 		sm_light_indices_.clear();
 
-		uint32_t const num_lights = scene_mgr.NumLights();
+		uint32_t const num_lights = scene_mgr.NumFrameLights();
 		
 		for (uint32_t i = 0; i < num_lights; ++ i)
 		{
-			auto light = scene_mgr.GetLight(i).get();
+			auto* light = scene_mgr.GetFrameLight(i);
 			if (light->Enabled() && (LightSource::LT_Ambient == light->Type()))
 			{
 				merged_ambient_light_->SkylightTex(light->SkylightTexY(), light->SkylightTexC());
-				lights_.push_back(merged_ambient_light_.get());
+				lights_.push_back({merged_ambient_light_.get(), &scene_mgr.SceneRootNode()});
 				break;
 			}
 		}
 		if (lights_.empty())
 		{
-			lights_.push_back(default_ambient_light_.get());
+			lights_.push_back({default_ambient_light_.get(), &scene_mgr.SceneRootNode()});
 		}
 		sm_light_indices_.emplace_back(-1, 0);
 
@@ -1434,7 +1434,7 @@ namespace KlayGE
 		uint32_t num_sm_cube_lights = 0;
 		for (uint32_t i = 0; i < num_lights; ++ i)
 		{
-			auto light = scene_mgr.GetLight(i).get();
+			auto* light = scene_mgr.GetFrameLight(i);
 			if (light->Enabled())
 			{
 				if (LightSource::LT_Ambient == light->Type())
@@ -1445,7 +1445,7 @@ namespace KlayGE
 				}
 				else
 				{
-					lights_.push_back(light);
+					lights_.push_back({light, scene_mgr.GetFrameLightNode(i)});
 
 					if (0 == (light->Attrib() & LightSource::LSA_NoShadow))
 					{
@@ -1513,14 +1513,14 @@ namespace KlayGE
 		{
 			ambient_clr = float3(0.1f, 0.1f, 0.1f);
 		}
-		lights_[0]->Color(ambient_clr);
+		lights_[0].first->Color(ambient_clr);
 
 		indirect_lighting_enabled_ = false;
 		if (rsm_fb_ && (illum_ != 1))
 		{
 			for (size_t i = 0; i < lights_.size(); ++ i)
 			{
-				if (lights_[i]->Attrib() & LightSource::LSA_IndirectLighting)
+				if (lights_[i].first->Attrib() & LightSource::LSA_IndirectLighting)
 				{
 					indirect_lighting_enabled_ = true;
 					break;
@@ -1543,7 +1543,7 @@ namespace KlayGE
 			{
 				if (node.Visible())
 				{
-					if (node.NumRenderables() > 0)
+					if (node.NumComponents() > 0)
 					{
 						visible_scene_nodes_.push_back(&node);
 
@@ -1593,7 +1593,7 @@ namespace KlayGE
 #endif
 			for (uint32_t i = 0; i < lights_.size(); ++ i)
 			{
-				auto const & light = *lights_[i];
+				auto const & light = *lights_[i].first;
 				if (light.Enabled())
 				{
 					this->AppendShadowPassScanCode(i);
@@ -1625,7 +1625,7 @@ namespace KlayGE
 					pvp.light_visibles.resize(lights_.size());
 					for (uint32_t li = 0; li < lights_.size(); ++ li)
 					{
-						auto const & light = *lights_[li];
+						auto const & light = *lights_[li].first;
 						if (light.Enabled())
 						{
 							this->CheckLightVisible(vpi, li);
@@ -1670,7 +1670,7 @@ namespace KlayGE
 #endif
 								for (uint32_t li = 0; li < lights_.size(); ++ li)
 								{
-									auto const & light = *lights_[li];
+									auto const & light = *lights_[li].first;
 									if (light.Enabled())
 									{
 										if ((LightSource::LT_Spot == light.Type()) && (PTB_Opaque == pass_tb)
@@ -1743,7 +1743,7 @@ namespace KlayGE
 		SceneManager& scene_mgr = Context::Instance().SceneManagerInstance();
 
 		PerViewport& pvp = viewports_[vp_index];
-		auto const & light = *lights_[light_index];
+		auto const & light = *lights_[light_index].first;
 
 		float light_scale = std::min(light.Range() * 0.01f, 1.0f) * light_scale_;
 		switch (light.Type())
@@ -1762,7 +1762,7 @@ namespace KlayGE
 		case LightSource::LT_SphereArea:
 		case LightSource::LT_TubeArea:
 			{
-				float3 const & p = light.Position();
+				float3 const p = MathLib::transform_coord(float3(0, 0, 0), lights_[light_index].second->TransformToWorld());
 				float4x4 light_model = MathLib::scaling(light_scale, light_scale, light_scale)
 					* MathLib::translation(p);
 				pvp.light_visibles[light_index] = (scene_mgr.AABBVisible(MathLib::transform_aabb(box_aabb_, light_model)) != BO_No);
@@ -1825,7 +1825,7 @@ namespace KlayGE
 	{
 		PassType shadow_pt = PT_GenShadowMap;
 
-		auto const & light = *lights_[light_index];
+		auto const & light = *lights_[light_index].first;
 		LightSource::LightType type = light.Type();
 		int32_t attr = light.Attrib();
 		switch (type)
@@ -1900,7 +1900,7 @@ namespace KlayGE
 
 	void DeferredRenderingLayer::AppendCascadedShadowPassScanCode(uint32_t vp_index, uint32_t light_index)
 	{
-		BOOST_ASSERT(LightSource::LT_Directional == lights_[light_index]->Type());
+		BOOST_ASSERT(LightSource::LT_Directional == lights_[light_index].first->Type());
 
 #ifndef KLAYGE_SHIP
 		jobs_.push_back(MakeSharedPtr<DeferredRenderingJob>([this] { return this->BeginPerfProfileDRJob(*shadow_map_perf_); }));
@@ -2103,11 +2103,17 @@ namespace KlayGE
 		}
 	}
 
-	void DeferredRenderingLayer::PrepareLightCamera(PerViewport const & pvp,
-		LightSource const & light, int32_t index_in_pass, PassType pass_type)
+	void DeferredRenderingLayer::PrepareLightCamera(
+		PerViewport const& pvp, LightSource const& light, SceneNode const& light_node, int32_t index_in_pass, PassType pass_type)
 	{
 		LightSource::LightType const type = light.Type();
 		PassCategory const pass_cat = GetPassCategory(pass_type);
+
+		float3 light_scale_unused;
+		Quaternion light_rot;
+		float3 light_pos;
+		MathLib::decompose(light_scale_unused, light_rot, light_pos, light_node.TransformToWorld());
+		float3 const light_dir = MathLib::transform_quat(float3(0, 0, 1), light_rot);
 
 		switch (type)
 		{
@@ -2121,19 +2127,19 @@ namespace KlayGE
 				float3 dir_es(0, 0, 0);
 				if (LightSource::LT_Spot == type)
 				{
-					dir_es = MathLib::transform_normal(light.Direction(), pvp.view);
+					dir_es = MathLib::transform_normal(light_dir, pvp.view);
 					sm_camera = light.SMCamera(0);
 				}
 				else if (LightSource::LT_Directional == type)
 				{
-					dir_es = MathLib::transform_normal(-light.Direction(), pvp.view);
+					dir_es = MathLib::transform_normal(-light_dir, pvp.view);
 					sm_camera = light.SMCamera(0);
 				}
 				else
 				{
 					int32_t face = std::min(index_in_pass, 5);
 					std::pair<float3, float3> ad = CubeMapViewVector<float>(static_cast<Texture::CubeFaces>(face));
-					dir_es = MathLib::transform_normal(MathLib::transform_quat(ad.first, light.Rotation()), pvp.view);
+					dir_es = MathLib::transform_normal(MathLib::transform_quat(ad.first, light_rot), pvp.view);
 					sm_camera = light.SMCamera(face);
 				}
 				float4 light_dir_es_actived = float4(dir_es.x(), dir_es.y(), dir_es.z(), 0);
@@ -2162,8 +2168,7 @@ namespace KlayGE
 					depth_to_esm_pp_->SetParam(1, inv_sm_proj);
 				}
 
-				float3 const & p = light.Position();
-				float3 loc_es = MathLib::transform_coord(p, pvp.view);
+				float3 loc_es = MathLib::transform_coord(light_pos, pvp.view);
 				float4 light_pos_es_actived = float4(loc_es.x(), loc_es.y(), loc_es.z(), 1);
 
 				float light_scale = std::min(light.Range() * 0.01f, 1.0f) * light_scale_;
@@ -2187,7 +2192,7 @@ namespace KlayGE
 					if ((PC_Shadowing == pass_cat) || (PC_Shading == pass_cat))
 					{
 						float4x4 const light_model = MathLib::scaling(light_scale, light_scale, light_scale)
-							* MathLib::to_matrix(light.Rotation()) * MathLib::translation(p);
+							* MathLib::to_matrix(light_rot) * MathLib::translation(light_pos);
 						*light_volume_mv_param_ = light_model * pvp.view;
 						*light_volume_mvp_param_ = light_model * pvp.view * pvp.proj;
 						*view_to_light_model_param_ = pvp.inv_view * MathLib::inverse(light_model);
@@ -2229,7 +2234,7 @@ namespace KlayGE
 
 	void DeferredRenderingLayer::PostGenerateShadowMap(PerViewport const & pvp, int32_t org_no, int32_t index_in_pass)
 	{
-		LightSource::LightType const type = lights_[org_no]->Type();
+		LightSource::LightType const type = lights_[org_no].first->Type();
 
 		if (type != LightSource::LT_Directional)
 		{
@@ -2313,13 +2318,14 @@ namespace KlayGE
 	{
 		for (uint32_t li = 0; li < lights_.size(); ++ li)
 		{
-			auto const & light = *lights_[li];
+			auto const& light = *lights_[li].first;
+			auto const& light_node = *lights_[li].second;
 			int32_t const attr = light.Attrib();
 			if (light.Enabled() && (0 == (attr & LightSource::LSA_NoShadow)) && pvp.light_visibles[li])
 			{
 				LightSource::LightType const type = light.Type();
 
-				this->PrepareLightCamera(pvp, light, 0, PT_Shadowing);
+				this->PrepareLightCamera(pvp, light, light_node, 0, PT_Shadowing);
 
 				if ((LightSource::LT_Point == type) || (LightSource::LT_SphereArea == type)
 					|| (LightSource::LT_TubeArea == type))
@@ -2368,7 +2374,7 @@ namespace KlayGE
 
 					case LightSource::LT_Directional:
 						{
-							sm_camera = lights_[cascaded_shadow_index_]->SMCamera(0).get();
+							sm_camera = lights_[cascaded_shadow_index_].first->SMCamera(0).get();
 							BOOST_ASSERT(sm_camera);
 							KLAYGE_ASSUME(sm_camera);
 
@@ -2482,10 +2488,15 @@ namespace KlayGE
 
 		for (uint32_t li = 0; li < lights_.size(); ++ li)
 		{
-			auto const & light = *lights_[li];
+			auto const & light = *lights_[li].first;
 			int32_t const attr = light.Attrib();
 			if (light.Enabled() && (0 == (attr & LightSource::LSA_NoShadow)) && pvp.light_visibles[li])
 			{
+				float3 light_scale_unused;
+				Quaternion light_rot;
+				float3 light_pos;
+				MathLib::decompose(light_scale_unused, light_rot, light_pos, lights_[li].second->TransformToWorld());
+
 				LightSource::LightType const type = light.Type();
 
 				Camera* sm_camera = nullptr;
@@ -2517,7 +2528,7 @@ namespace KlayGE
 
 					case LightSource::LT_Directional:
 						{
-							sm_camera = lights_[cascaded_shadow_index_]->SMCamera(0).get();
+							sm_camera = lights_[cascaded_shadow_index_].first->SMCamera(0).get();
 
 							std::vector<float4> cascade_scale_bias(pvp.num_cascades);
 							for (uint32_t i = 0; i < pvp.num_cascades; ++ i)
@@ -2561,7 +2572,7 @@ namespace KlayGE
 				*reinterpret_cast<float*>(esms_scale_factor + shadowing_channel * esms_scale_factor_param_->Stride())
 					= ESM_SCALE_FACTOR / (sm_camera->FarPlane() - sm_camera->NearPlane());
 
-				float3 loc_es = MathLib::transform_coord(light.Position(), pvp.view);
+				float3 loc_es = MathLib::transform_coord(light_pos, pvp.view);
 				float4 light_pos_es_actived = float4(loc_es.x(), loc_es.y(), loc_es.z(), 1);
 
 				float range = light.Range() * light_scale_;
@@ -2589,7 +2600,7 @@ namespace KlayGE
 					{
 						float light_scale = std::min(light.Range() * 0.01f, 1.0f) * light_scale_;
 						float4x4 const light_model = MathLib::scaling(light_scale, light_scale, light_scale)
-							* MathLib::to_matrix(light.Rotation()) * MathLib::translation(light.Position());
+							* MathLib::to_matrix(light_rot) * MathLib::translation(light_pos);
 						*view_to_light_model_param_ = pvp.inv_view * MathLib::inverse(light_model);
 					}
 					break;
@@ -2650,7 +2661,7 @@ namespace KlayGE
 	{
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
-		LightSource const & light = *lights_[org_no];
+		LightSource const & light = *lights_[org_no].first;
 		int32_t shadowing_channel;
 		if (0 == (light.Attrib() & LightSource::LSA_NoShadow))
 		{
@@ -2749,7 +2760,7 @@ namespace KlayGE
 
 	void DeferredRenderingLayer::AddTranslucency(uint32_t org_no, PerViewport const & pvp, PassTargetBuffer pass_tb)
 	{
-		auto & light = lights_[org_no];
+		auto const& light = lights_[org_no].first;
 		LightSource::LightType const type = light->Type();
 		int32_t const light_index = sm_light_indices_[org_no].first;
 		if (light->Enabled() && pvp.light_visibles[org_no] && (0 == (light->Attrib() & LightSource::LSA_NoShadow))
@@ -2786,7 +2797,8 @@ namespace KlayGE
 				trans_pp->SetParam(0, pvp.inv_view * light_camera->ViewProjMatrix());
 				trans_pp->SetParam(1, pvp.inv_view * light_camera->ViewMatrix());
 				trans_pp->SetParam(2, pvp.inv_proj);
-				trans_pp->SetParam(3, MathLib::transform_coord(light->Position(), pvp.view));
+				trans_pp->SetParam(3, MathLib::transform_coord(
+										  MathLib::transform_coord(float3(0, 0, 0), lights_[org_no].second->TransformToWorld()), pvp.view));
 				trans_pp->SetParam(4, float3(light->Color()));
 				trans_pp->SetParam(5, light->Falloff());
 				trans_pp->SetParam(7, scene_camera.FarPlane());
@@ -3047,7 +3059,7 @@ namespace KlayGE
 		std::vector<uint32_t> tube_area_lights_no_shadow;
 		for (uint32_t li = 0; li < lights_.size(); ++ li)
 		{
-			auto const & light = *lights_[li];
+			auto const & light = *lights_[li].first;
 			if (light.Enabled() && pvp.light_visibles[li])
 			{
 				LightSource::LightType const type = light.Type();
@@ -3224,7 +3236,7 @@ namespace KlayGE
 	{
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
-		auto const & light = *lights_[org_no];
+		auto const & light = *lights_[org_no].first;
 		int32_t const attr = light.Attrib();
 		
 		int32_t shadowing_channel;
@@ -3247,7 +3259,13 @@ namespace KlayGE
 
 			lights_color.push_back(light.Color());
 
-			float3 dir_es = MathLib::transform_normal(-light.Direction(), pvp.view);
+			float3 light_scale_unused;
+			Quaternion light_rot;
+			float3 light_pos;
+			MathLib::decompose(light_scale_unused, light_rot, light_pos, lights_[org_no].second->TransformToWorld());
+			float3 const light_dir = MathLib::transform_quat(float3(0, 0, 1), light_rot);
+
+			float3 dir_es = MathLib::transform_normal(-light_dir, pvp.view);
 			lights_dir_es.push_back(float4(dir_es.x(), dir_es.y(), dir_es.z(), 0));
 
 			lights_attrib.push_back(float4((attr & LightSource::LSA_NoDiffuse) ? 0.0f : 1.0f,
@@ -3311,13 +3329,19 @@ namespace KlayGE
 		std::vector<float4> lights_attrib;
 		for (auto iter = iter_beg; iter != iter_end; ++ iter)
 		{
-			auto const & light = *lights_[*iter];
+			auto const & light = *lights_[*iter].first;
 			BOOST_ASSERT(LightSource::LT_Directional == light.Type());
 			int32_t attr = light.Attrib();
 
 			lights_color.push_back(light.Color());
 
-			float3 dir_es = MathLib::transform_normal(-light.Direction(), pvp.view);
+			float3 light_scale_unused;
+			Quaternion light_rot;
+			float3 light_pos;
+			MathLib::decompose(light_scale_unused, light_rot, light_pos, lights_[*iter].second->TransformToWorld());
+			float3 const light_dir = MathLib::transform_quat(float3(0, 0, 1), light_rot);
+
+			float3 dir_es = MathLib::transform_normal(-light_dir, pvp.view);
 			lights_dir_es.push_back(float4(dir_es.x(), dir_es.y(), dir_es.z(), 0));
 
 			lights_attrib.push_back(float4((attr & LightSource::LSA_NoDiffuse) ? 0.0f : 1.0f,
@@ -3359,8 +3383,8 @@ namespace KlayGE
 
 		*camera_proj_01_param_ = float2(pvp.proj(0, 0) * tile_scale.x(), pvp.proj(1, 1) * tile_scale.y());
 
-		LightSource::LightType type = lights_[*iter_beg]->Type();
-		bool with_shadow = !(lights_[*iter_beg]->Attrib() & LightSource::LSA_NoShadow);
+		LightSource::LightType type = lights_[*iter_beg].first->Type();
+		bool with_shadow = !(lights_[*iter_beg].first->Attrib() & LightSource::LSA_NoShadow);
 
 		BOOST_ASSERT((LightSource::LT_Point == type) || (LightSource::LT_Spot == type)
 			|| (LightSource::LT_SphereArea == type) || (LightSource::LT_TubeArea == type));
@@ -3375,21 +3399,26 @@ namespace KlayGE
 		std::vector<float3> lights_aabb_max;
 		for (auto iter = iter_beg; iter != iter_end; ++ iter)
 		{
-			auto const & light = *lights_[*iter];
+			auto const & light = *lights_[*iter].first;
 			BOOST_ASSERT(type == light.Type());
 
 			int32_t const attr = light.Attrib();
 
 			lights_color.push_back(light.Color());
 
-			float3 const & p = light.Position();
-			float3 const loc_es = MathLib::transform_coord(p, pvp.view);
+			float3 light_scale_unused;
+			Quaternion light_rot;
+			float3 light_pos;
+			MathLib::decompose(light_scale_unused, light_rot, light_pos, lights_[*iter].second->TransformToWorld());
+			float3 const light_dir = MathLib::transform_quat(float3(0, 0, 1), light_rot);
+
+			float3 const loc_es = MathLib::transform_coord(light_pos, pvp.view);
 			lights_pos_es.push_back(float4(loc_es.x(), loc_es.y(), loc_es.z(), 1));
 
 			float3 dir_es(0, 0, 0);
 			if (LightSource::LT_Spot == type)
 			{
-				dir_es = MathLib::transform_normal(light.Direction(), pvp.view);
+				dir_es = MathLib::transform_normal(light_dir, pvp.view);
 			}
 			lights_dir_es.push_back(float4(dir_es.x(), dir_es.y(), dir_es.z(), 0));
 
@@ -3574,7 +3603,7 @@ namespace KlayGE
 			std::array<std::vector<uint32_t>, 11> available_lights;
 			for (uint32_t batch = 0; (batch < light_batch_) && (li < lights_.size()); ++ li)
 			{
-				auto const & light = *lights_[li];
+				auto const & light = *lights_[li].first;
 				if (light.Enabled() && pvp.light_visibles[li])
 				{
 					++ batch;
@@ -3682,7 +3711,7 @@ namespace KlayGE
 			{
 				for (uint32_t i = 0; i < available_lights[t].size(); ++ i)
 				{
-					auto const & light = *lights_[available_lights[t][i]];
+					auto const & light = *lights_[available_lights[t][i]].first;
 					LightSource::LightType type = light.Type();
 					int32_t attr = light.Attrib();
 					uint32_t offset = *reinterpret_cast<uint32_t*>(lights_type + t * lights_type_param_->Stride()) + i;
@@ -3690,8 +3719,14 @@ namespace KlayGE
 					*reinterpret_cast<float4*>(lights_color
 						+ offset * lights_color_param_->Stride()) = light.Color();
 
-					float3 const & p = light.Position();
-					float3 loc_es = MathLib::transform_coord(p, pvp.view);
+					float3 light_scale_unused;
+					Quaternion light_rot;
+					float3 light_pos;
+					MathLib::decompose(
+						light_scale_unused, light_rot, light_pos, lights_[available_lights[t][i]].second->TransformToWorld());
+					float3 const light_dir = MathLib::transform_quat(float3(0, 0, 1), light_rot);
+
+					float3 loc_es = MathLib::transform_coord(light_pos, pvp.view);
 					*reinterpret_cast<float4*>(lights_pos_es
 						+ offset * lights_pos_es_param_->Stride()) = float4(loc_es.x(), loc_es.y(), loc_es.z(), 1);
 
@@ -3703,11 +3738,11 @@ namespace KlayGE
 						break;
 
 					case LightSource::LT_Directional:
-						dir_es = MathLib::transform_normal(-light.Direction(), pvp.view);
+						dir_es = MathLib::transform_normal(-light_dir, pvp.view);
 						break;
 
 					case LightSource::LT_Spot:
-						dir_es = MathLib::transform_normal(light.Direction(), pvp.view);
+						dir_es = MathLib::transform_normal(light_dir, pvp.view);
 						break;
 
 					default:
@@ -4082,9 +4117,10 @@ namespace KlayGE
 		if (cascaded_shadow_index_ >= 0)
 		{
 			Camera const & scene_camera = *pvp.frame_buffer->GetViewport()->camera;
-			Camera const & light_camera = *lights_[cascaded_shadow_index_]->SMCamera(0);
+			Camera const & light_camera = *lights_[cascaded_shadow_index_].first->SMCamera(0);
 
-			checked_cast<DirectionalLightSource*>(lights_[cascaded_shadow_index_])->UpdateSMCamera(scene_camera);
+			checked_cast<DirectionalLightSource*>(lights_[cascaded_shadow_index_].first)
+				->UpdateSMCamera(*lights_[cascaded_shadow_index_].second, scene_camera);
 
 			float const BLUR_FACTOR = 0.2f;
 			blur_size_light_space_.x() = BLUR_FACTOR * 0.5f * light_camera.ProjMatrix()(0, 0);
@@ -4119,8 +4155,8 @@ namespace KlayGE
 			node->Pass(pass_type);
 		}
 
-		auto const & light = *lights_[org_no];
-		this->PrepareLightCamera(pvp, light, index_in_pass, pass_type);
+		auto const & light = *lights_[org_no].first;
+		this->PrepareLightCamera(pvp, light, *lights_[org_no].second, index_in_pass, pass_type);
 
 		if (index_in_pass > 0)
 		{
@@ -4179,7 +4215,7 @@ namespace KlayGE
 	uint32_t DeferredRenderingLayer::IndirectLightingDRJob(PerViewport const & pvp, int32_t org_no)
 	{
 		depth_to_esm_pp_->Apply();
-		pvp.il_layer->UpdateRSM(*rsm_fb_->GetViewport()->camera, *lights_[org_no]);
+		pvp.il_layer->UpdateRSM(*rsm_fb_->GetViewport()->camera, *lights_[org_no].first, *lights_[org_no].second);
 		return 0;
 	}
 

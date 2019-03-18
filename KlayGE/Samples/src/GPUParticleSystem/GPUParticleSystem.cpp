@@ -137,6 +137,8 @@ namespace
 	class RenderParticles : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderParticles(int max_num_particles)
 			: Renderable(L"RenderParticles"),
 				tex_width_(256), tex_height_((max_num_particles + 255) / 256)
@@ -257,6 +259,8 @@ namespace
 	class GPUParticleSystem : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		GPUParticleSystem(int max_num_particles, TexturePtr const & terrain_height_map, TexturePtr const & terrain_normal_map)
 			: Renderable(L"GPUParticleSystem"),
 				max_num_particles_(max_num_particles),
@@ -727,6 +731,8 @@ namespace
 	class TerrainRenderable : public RenderablePlane
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((RenderablePlane))
+
 		explicit TerrainRenderable(TexturePtr const & height_map, TexturePtr const & normal_map)
 			: RenderablePlane(4, 4, 64, 64, true, false)
 		{

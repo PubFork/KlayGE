@@ -31,58 +31,120 @@ using namespace KlayGE;
 
 namespace
 {
-	class SpotLightSourceUpdate
+	class SpotLightNodeUpdate
 	{
 	public:
-		explicit SpotLightSourceUpdate(float3 const & clr)
-			: random_dis_(0, 1000),
-				color_(clr)
+		explicit SpotLightNodeUpdate(SceneNode& node)
+			: node_(node), init_pos_(MathLib::transform_coord(float3(0, 0, 0), node.TransformToParent())), random_dis_(0, 1000)
 		{
 		}
 
-		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
+		void operator()(float app_time, float elapsed_time)
 		{
-			light.Direction(float3(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f),
-				1, MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f)));
-			light.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));
+			KFL_UNUSED(app_time);
+			KFL_UNUSED(elapsed_time);
+
+			float3 dir(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f), 1, MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f));
+			node_.TransformToParent(MathLib::inverse(MathLib::look_at_lh(init_pos_, init_pos_ + dir, float3(0, 0, 1))));
 		}
 
 	private:
+		SceneNode& node_;
+		float3 init_pos_;
+
 		ranlux24_base gen_;
 		uniform_int_distribution<> random_dis_;
-		float3 color_;
 	};
 
-	class GISpotLightSourceUpdate
+	class SpotLightSourceUpdate
 	{
 	public:
-		GISpotLightSourceUpdate()
+		explicit SpotLightSourceUpdate(SpotLightSource& light)
+			: light_(light), color_(light.Color()), random_dis_(0, 1000)
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(float app_time, float elapsed_time)
 		{
-			light.Direction(float3(sin(app_time) * 0.3f, -1, 0.1f));
+			KFL_UNUSED(app_time);
+			KFL_UNUSED(elapsed_time);
+
+			light_.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));
 		}
+
+	private:
+		SpotLightSource& light_;
+		float3 color_;
+
+		ranlux24_base gen_;
+		uniform_int_distribution<> random_dis_;
+	};
+
+	class GISpotLightNodeUpdate
+	{
+	public:
+		explicit GISpotLightNodeUpdate(SceneNode& node)
+			: node_(node), init_pos_(MathLib::transform_coord(float3(0, 0, 0), node.TransformToParent()))
+		{
+		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(elapsed_time);
+
+			float3 dir(sin(app_time) * 0.3f, -1, 0.1f);
+			node_.TransformToParent(MathLib::inverse(MathLib::look_at_lh(init_pos_, init_pos_ + dir)));
+		}
+
+	private:
+		SceneNode& node_;
+		float3 init_pos_;
+	};
+
+	class PointLightNodeUpdate
+	{
+	public:
+		PointLightNodeUpdate(SceneNode& node, uint32_t index, uint32_t num)
+			: node_(node), index_(index), num_(num)
+		{
+		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(elapsed_time);
+
+			float const factor = (50.0f + app_time * 0.6f) / num_;
+			node_.TransformToParent(
+				MathLib::translation(6.0f * sin(factor * index_), 5.0f + 10.0f / num_ * index_, 6.0f * cos(factor * index_) + 1));
+		}
+
+	private:
+		SceneNode& node_;
+		uint32_t index_;
+		uint32_t num_;
 	};
 
 	class PointLightSourceUpdate
 	{
 	public:
-		PointLightSourceUpdate(float move_speed, float3 const & pos)
-			: move_speed_(move_speed), pos_(pos)
+		PointLightSourceUpdate(LightSource& light, uint32_t index)
+			: light_(light), index_(index)
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(float app_time, float elapsed_time)
 		{
-			light.ModelMatrix(MathLib::translation(sin(app_time * 1000 * move_speed_), 0.0f, 0.0f)
-				* MathLib::translation(pos_));
+			KFL_UNUSED(elapsed_time);
+
+			float3 const clr = MathLib::normalize(float3(sin(app_time * 0.3f + index_ * 10.0f),
+				cos(app_time * 0.2f + 0.5f + index_ * 20.0f), sin(app_time * 0.1f + 1.0f + index_ * 30.0f))) * 0.3f + 0.1f;
+			light_.Color(clr);
 		}
 
 	private:
-		float move_speed_;
-		float3 pos_;
+		LightSource& light_;
+		uint32_t index_;
+		uint32_t num_;
 	};
 
 
@@ -136,50 +198,62 @@ void DeferredRenderingApp::OnCreate()
 
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
-	
-	spot_light_[0] = MakeSharedPtr<SpotLightSource>();
-	spot_light_[0]->Attrib(0);
-	spot_light_[0]->Color(float3(1.0f, 0.17f, 0.05f) * 10.0f);
-	spot_light_[0]->Falloff(float3(1, 0.5f, 0));
-	spot_light_[0]->Position(float3(+14.6f, 3.7f, -4.3f));
-	spot_light_[0]->Direction(float3(0, 1, 0));
-	spot_light_[0]->OuterAngle(PI / 2.5f);
-	spot_light_[0]->InnerAngle(PI / 4);
-	spot_light_[0]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[0]->Color()));
-	spot_light_[0]->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
-	spot_light_[1] = MakeSharedPtr<SpotLightSource>();
-	spot_light_[1]->Attrib(0);
-	spot_light_[1]->Color(float3(1.0f, 0.17f, 0.05f) * 10.0f);
-	spot_light_[1]->Falloff(float3(1, 0.5f, 0));
-	spot_light_[1]->Position(float3(-18.6f, 3.7f, +6.5f));
-	spot_light_[1]->Direction(float3(0, 1, 0));
-	spot_light_[1]->OuterAngle(PI / 2.5f);
-	spot_light_[1]->InnerAngle(PI / 4);
-	spot_light_[1]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[1]->Color()));
-	spot_light_[1]->AddToSceneManager();
+	float3 const torch_pos[2] = {{+14.6f, 3.7f, -4.3f}, {-18.6f, 3.7f, +6.5f}};
 
-	spot_light_[2] = MakeSharedPtr<SpotLightSource>();
-	spot_light_[2]->Attrib(LightSource::LSA_IndirectLighting);
-	spot_light_[2]->Color(float3(6.0f, 5.88f, 4.38f) * 10.0f);
-	spot_light_[2]->Position(float3(0.0f, 43.2f, -5.9f));
-	spot_light_[2]->Direction(float3(0.0f, -1, 0.1f));
-	spot_light_[2]->Falloff(float3(1, 0.1f, 0));
-	spot_light_[2]->OuterAngle(PI / 8);
-	spot_light_[2]->InnerAngle(PI / 12);
-	spot_light_[2]->BindUpdateFunc(GISpotLightSourceUpdate());
-	spot_light_[2]->AddToSceneManager();
+	{
+		auto spot_light = MakeSharedPtr<SpotLightSource>();
+		spot_light->Attrib(0);
+		spot_light->Color(float3(1.0f, 0.17f, 0.05f) * 10.0f);
+		spot_light->Falloff(float3(1, 0.5f, 0));
+		spot_light->OuterAngle(PI / 2.5f);
+		spot_light->InnerAngle(PI / 4);
+		spot_light->BindUpdateFunc(SpotLightSourceUpdate(*spot_light));
 
-	spot_light_src_[0] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[0]);
-	spot_light_src_[0]->Scaling(0.1f, 0.1f, 0.1f);
-	spot_light_src_[1] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[1]);
-	spot_light_src_[1]->Scaling(0.1f, 0.1f, 0.1f);
-	spot_light_src_[2] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[2]);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(spot_light_src_[2]->RootNode());
+		auto spot_light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+		spot_light_node->TransformToParent(MathLib::translation(torch_pos[0]));
+		spot_light_node->OnMainThreadUpdate().Connect(SpotLightNodeUpdate(*spot_light_node));
+		spot_light_node->AddComponent(spot_light);
+		root_node.AddChild(spot_light_node);
+	}
+	{
+		auto spot_light = MakeSharedPtr<SpotLightSource>();
+		spot_light->Attrib(0);
+		spot_light->Color(float3(1.0f, 0.17f, 0.05f) * 10.0f);
+		spot_light->Falloff(float3(1, 0.5f, 0));
+		spot_light->OuterAngle(PI / 2.5f);
+		spot_light->InnerAngle(PI / 4);
+		spot_light->BindUpdateFunc(SpotLightSourceUpdate(*spot_light));
+
+		auto spot_light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+		spot_light_node->TransformToParent(MathLib::translation(torch_pos[1]));
+		spot_light_node->OnMainThreadUpdate().Connect(SpotLightNodeUpdate(*spot_light_node));
+		spot_light_node->AddComponent(spot_light);
+		root_node.AddChild(spot_light_node);
+	}
+	{
+		auto spot_light = MakeSharedPtr<SpotLightSource>();
+		spot_light->Attrib(LightSource::LSA_IndirectLighting);
+		spot_light->Color(float3(6.0f, 5.88f, 4.38f) * 10.0f);
+		spot_light->Falloff(float3(1, 0.1f, 0));
+		spot_light->OuterAngle(PI / 8);
+		spot_light->InnerAngle(PI / 12);
+
+		auto spot_light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+		spot_light_node->TransformToParent(MathLib::translation(0.0f, 43.2f, -5.9f));
+		spot_light_node->OnMainThreadUpdate().Connect(GISpotLightNodeUpdate(*spot_light_node));
+		spot_light_node->AddComponent(spot_light);
+		root_node.AddChild(spot_light_node);
+
+		auto spot_light_proxy = LoadLightSourceProxyModel(spot_light);
+		spot_light_node->AddChild(spot_light_proxy->RootNode());
+	}
 
 	fpcController_.Scalers(0.05f, 0.5f);
 
@@ -268,23 +342,23 @@ void DeferredRenderingApp::OnCreate()
 		});
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableSkyBox>();
+	sky_box->CompressedCubeMap(y_cube, c_cube);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
 	ps_ = SyncLoadParticleSystem("Fire.psml");
 	ps_->Gravity(0.5f);
 	ps_->MediaDensity(0.5f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(ps_);
+	root_node.AddChild(ps_);
 
 	float const SCALE = 3;
 	ps_->TransformToParent(MathLib::scaling(SCALE, SCALE, SCALE));
 
 	ParticleEmitterPtr emitter0 = ps_->Emitter(0);
-	emitter0->ModelMatrix(MathLib::translation(spot_light_[0]->Position() / SCALE));
+	emitter0->ModelMatrix(MathLib::translation(torch_pos[0] / SCALE));
 
 	ParticleEmitterPtr emitter1 = emitter0->Clone();
-	emitter1->ModelMatrix(MathLib::translation(spot_light_[1]->Position() / SCALE));
+	emitter1->ModelMatrix(MathLib::translation(torch_pos[1] / SCALE));
 	ps_->AddEmitter(emitter1);
 }
 
@@ -392,26 +466,40 @@ void DeferredRenderingApp::NumLightsChangedHandler(KlayGE::UISlider const & send
 
 	std::lock_guard<std::mutex> lock(scene_mgr.MutexForUpdate());
 
-	for (size_t i = num_lights; i < particle_lights_.size(); ++ i)
+	auto& root_node = scene_mgr.SceneRootNode();
+
+	for (size_t i = num_lights; i < particle_light_nodes_.size(); ++ i)
 	{
-		particle_lights_[i]->DelFromSceneManager();
-		scene_mgr.SceneRootNode().RemoveChild(particle_light_srcs_[i]->RootNode());
+		root_node.RemoveChild(particle_light_nodes_[i]);
 	}
 
-	size_t old_size = particle_lights_.size();
+	size_t old_size = particle_light_nodes_.size();
 
-	particle_lights_.resize(num_lights);
-	particle_light_srcs_.resize(num_lights);
-	for (size_t i = old_size; i < particle_lights_.size(); ++ i)
+	particle_light_nodes_.resize(num_lights);
+	for (size_t i = old_size; i < particle_light_nodes_.size(); ++ i)
 	{
-		particle_lights_[i] = MakeSharedPtr<PointLightSource>();
-		particle_lights_[i]->Attrib(LightSource::LSA_NoShadow);
-		particle_lights_[i]->Falloff(float3(1, 0, 1));
-		particle_lights_[i]->AddToSceneManager();
+		auto particle_light = MakeSharedPtr<PointLightSource>();
+		particle_light->Attrib(LightSource::LSA_NoShadow);
+		particle_light->Falloff(float3(1, 0, 1));
 
-		particle_light_srcs_[i] = MakeSharedPtr<SceneObjectLightSourceProxy>(particle_lights_[i]);
-		particle_light_srcs_[i]->Scaling(0.1f, 0.1f, 0.1f);
-		scene_mgr.SceneRootNode().AddChild(particle_light_srcs_[i]->RootNode());
+		particle_light_nodes_[i] = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+		particle_light_nodes_[i]->AddComponent(particle_light);
+
+		auto particle_light_proxy = LoadLightSourceProxyModel(particle_light);
+		particle_light_proxy->RootNode()->TransformToParent(
+			MathLib::scaling(0.1f, 0.1f, 0.1f) * particle_light_proxy->RootNode()->TransformToParent());
+		particle_light_nodes_[i]->AddChild(particle_light_proxy->RootNode());
+
+		root_node.AddChild(particle_light_nodes_[i]);
+	}
+
+	for (uint32_t i = 0; i < particle_light_nodes_.size(); ++i)
+	{
+		particle_light_nodes_[i]->OnMainThreadUpdate().Connect(
+			PointLightNodeUpdate(*particle_light_nodes_[i], i, static_cast<uint32_t>(particle_light_nodes_.size())));
+
+		auto light = particle_light_nodes_[i]->FirstComponentOfType<LightSource>();
+		light->BindUpdateFunc(PointLightSourceUpdate(*light, i));
 	}
 
 	std::wostringstream stream;
@@ -465,19 +553,5 @@ void DeferredRenderingApp::DoUpdateOverlay()
 
 uint32_t DeferredRenderingApp::DoUpdate(uint32_t pass)
 {
-	if (0 == pass)
-	{
-		for (uint32_t i = 0; i < particle_lights_.size(); ++ i)
-		{
-			float3 clr = MathLib::normalize(float3(sin(this->AppTime() * 0.3f + i * 10.0f),
-				cos(this->AppTime() * 0.2f + 0.5f + i * 20.0f),
-				sin(this->AppTime() * 0.1f + 1.0f + i * 30.0f))) * 0.3f + 0.1f;
-			particle_lights_[i]->Color(clr);
-			float factor = (50.0f + this->AppTime() * 0.6f) / particle_lights_.size();
-			particle_lights_[i]->Position(float3(6.0f * sin(factor * i),
-				5.0f + 10.0f / particle_lights_.size() * i, 6.0f * cos(factor * i) + 1));
-		}
-	}
-
 	return deferred_rendering_->Update(pass);
 }

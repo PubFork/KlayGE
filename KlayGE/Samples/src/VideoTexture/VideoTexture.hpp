@@ -26,8 +26,8 @@ private:
 
 	KlayGE::TrackballCameraController tb_controller_;
 
-	KlayGE::SceneObjectLightSourceProxyPtr light_proxy_;
 	KlayGE::LightSourcePtr light_;
+	KlayGE::SceneNodePtr light_node_;
 };
 
 #endif		// _VIDEOTEXTURE_HPP

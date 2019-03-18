@@ -25,6 +25,8 @@ namespace KlayGE
 #pragma pack(pop)
 
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((HQTerrainRenderable))
+
 		ProceduralTerrain();
 
 		void Render() override;

@@ -36,6 +36,8 @@ namespace
 	class RenderTeapot : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit RenderTeapot(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -124,16 +126,21 @@ void VideoTextureApp::OnCreate()
 	tb_controller_.AttachCamera(this->ActiveCamera());
 	tb_controller_.Scalers(0.003f, 0.0001f);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<PointLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(2, 2, 2));
 	light_->Falloff(float3(1, 0, 1.0f));
-	light_->Position(float3(0.25f, 0.5f, -1.0f));
-	light_->AddToSceneManager();
 
-	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-	light_proxy_->Scaling(0.01f, 0.01f, 0.01f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(light_proxy_->RootNode());
+	auto light_proxy = LoadLightSourceProxyModel(light_);
+	light_proxy->RootNode()->TransformToParent(MathLib::scaling(0.01f, 0.01f, 0.01f) * light_proxy->RootNode()->TransformToParent());
+
+	light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	light_node_->TransformToParent(MathLib::translation(0.25f, 0.5f, -1.0f));
+	light_node_->AddComponent(light_);
+	light_node_->AddChild(light_proxy->RootNode());
+	root_node.AddChild(light_node_);
 
 	InputEngine& inputEngine(Context::Instance().InputFactoryInstance().InputEngineInstance());
 	InputActionMap actionMap;
@@ -203,10 +210,10 @@ uint32_t VideoTextureApp::DoUpdate(uint32_t /*pass*/)
 	}		
 	re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 
-	checked_pointer_cast<RenderTeapot>(object_->GetRenderable())->VideoTexture(se.PresentTexture());
-	checked_pointer_cast<RenderTeapot>(object_->GetRenderable())->LightPos(light_->Position());
-	checked_pointer_cast<RenderTeapot>(object_->GetRenderable())->LightColor(light_->Color());
-	checked_pointer_cast<RenderTeapot>(object_->GetRenderable())->LightFalloff(light_->Falloff());
+	object_->FirstComponentOfType<RenderTeapot>()->VideoTexture(se.PresentTexture());
+	object_->FirstComponentOfType<RenderTeapot>()->LightPos(MathLib::transform_coord(float3(0, 0, 0), light_node_->TransformToParent()));
+	object_->FirstComponentOfType<RenderTeapot>()->LightColor(light_->Color());
+	object_->FirstComponentOfType<RenderTeapot>()->LightFalloff(light_->Falloff());
 
 	return App3DFramework::URV_NeedFlush | App3DFramework::URV_Finished;
 }

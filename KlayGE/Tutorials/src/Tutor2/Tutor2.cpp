@@ -141,7 +141,7 @@ void TutorFramework::OnCreate()
 	renderableMesh_ = model->RootNode();
 	for (size_t i = 0; i < meshes.size(); ++ i)
 	{
-		renderableMesh_->AddRenderable(meshes[i]);
+		renderableMesh_->AddComponent(meshes[i]);
 	}
 	KlayGE::Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(renderableMesh_);
 

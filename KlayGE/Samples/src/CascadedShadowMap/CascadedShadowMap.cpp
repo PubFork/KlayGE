@@ -87,16 +87,26 @@ void CascadedShadowMapApp::OnCreate()
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 	deferred_rendering_->SSVOEnabled(0, false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
-	
-	sun_light_ = MakeSharedPtr<DirectionalLightSource>();
-	sun_light_->Attrib(0);
-	sun_light_->Direction(MathLib::normalize(float3(50, -50, 50)));
-	sun_light_->Color(float3(1, 1, 1));
-	sun_light_->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
+
+	auto sun_light = MakeSharedPtr<DirectionalLightSource>();
+	sun_light->Attrib(0);
+	sun_light->Color(float3(1, 1, 1));
+	auto sun_light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+	auto* sun_light_node_ptr = sun_light_node.get();
+	sun_light_node->OnMainThreadUpdate().Connect([sun_light_node_ptr, this](float app_time, float elapsed_time) {
+		KFL_UNUSED(app_time);
+		KFL_UNUSED(elapsed_time);
+
+		sun_light_node_ptr->TransformToParent(light_ctrl_camera_.InverseViewMatrix());
+	});
+	sun_light_node->AddComponent(sun_light);
+	root_node.AddChild(sun_light_node);
 
 	fpcController_.Scalers(0.05f, 1.0f);
 
@@ -149,9 +159,9 @@ void CascadedShadowMapApp::OnCreate()
 		});
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableSkyBox>();
+	sky_box->CompressedCubeMap(y_cube, c_cube);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
 	RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
 	if (caps.max_shader_model < ShaderModel(5, 0))
@@ -242,10 +252,5 @@ void CascadedShadowMapApp::DoUpdateOverlay()
 
 uint32_t CascadedShadowMapApp::DoUpdate(uint32_t pass)
 {
-	if (0 == pass)
-	{
-		sun_light_->Direction(light_ctrl_camera_.ForwardVec());
-	}
-
 	return deferred_rendering_->Update(pass);
 }

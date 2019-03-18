@@ -41,6 +41,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableSkyBox : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderableSkyBox();
 		virtual ~RenderableSkyBox()
 		{

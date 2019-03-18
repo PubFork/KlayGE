@@ -41,6 +41,8 @@ namespace
 	class ForwardMesh : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit ForwardMesh(std::wstring_view name)
 			: StaticMesh(name)
 		{
@@ -91,11 +93,13 @@ namespace
 			*(effect_->ParameterByName("model")) = model_mat_;
 			*(effect_->ParameterByName("eye_pos")) = app.ActiveCamera().EyePos();
 
-			auto const & light_src = Context::Instance().SceneManagerInstance().GetLight(0);
+			auto& scene_mgr = Context::Instance().SceneManagerInstance();
+			auto const& light_node = *scene_mgr.GetFrameLightNode(0);
+			auto const& light_src = *scene_mgr.GetFrameLight(0);
 
-			*(effect_->ParameterByName("light_pos")) = light_src->Position();
-			*(effect_->ParameterByName("light_color")) = light_src->Color();
-			*(effect_->ParameterByName("light_falloff")) = light_src->Falloff();
+			*(effect_->ParameterByName("light_pos")) = MathLib::transform_coord(float3(0, 0, 0), light_node.TransformToParent());
+			*(effect_->ParameterByName("light_color")) = light_src.Color();
+			*(effect_->ParameterByName("light_falloff")) = light_src.Falloff();
 		}
 
 	private:
@@ -166,24 +170,28 @@ void VDMParticleApp::OnCreate()
 	this->LookAt(float3(1.47f, 2.35f, -5.75f), float3(-2.18f, 0.71f, 2.20f));
 	this->Proj(0.1f, 200);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<SpotLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(1.0f, 0.67f, 0.55f) * 20.0f);
 	light_->Falloff(float3(1, 0.5f, 0));
-	light_->Position(float3(0, 0, 0));
-	light_->Direction(float3(0, 1, 0));
 	light_->OuterAngle(PI / 2.5f);
 	light_->InnerAngle(PI / 4);
-	light_->AddToSceneManager();
+
+	light_node_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	light_node_->TransformToParent(MathLib::inverse(MathLib::look_at_lh(float3(0, 0, 0), float3(0, 1, 0), float3(0, 0, 1))));
+	light_node_->AddComponent(light_);
+	root_node.AddChild(light_node_);
 
 	ps_ = SyncLoadParticleSystem(ResLoader::Instance().Locate("Fire.psml"));
 	ps_->Gravity(0.5f);
 	ps_->MediaDensity(0.5f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(ps_);
+	root_node.AddChild(ps_);
 
 	float const SCALE = 6;
 	ps_->TransformToParent(MathLib::scaling(SCALE, SCALE, SCALE));
-	ps_->Emitter(0)->ModelMatrix(MathLib::translation(light_->Position() / SCALE));
+	ps_->Emitter(0)->ModelMatrix(MathLib::translation(MathLib::transform_coord(float3(0, 0, 0), light_node_->TransformToParent()) / SCALE));
 
 	scene_fb_ = rf.MakeFrameBuffer();
 	scene_fb_->GetViewport()->camera = re.CurFrameBuffer()->GetViewport()->camera;

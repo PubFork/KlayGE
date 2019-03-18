@@ -39,6 +39,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderablePoint : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderablePoint();
 		RenderablePoint(float3 const & v, Color const & clr);
 		virtual ~RenderablePoint()
@@ -58,6 +60,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableLine : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderableLine();
 		RenderableLine(float3 const & v0, float3 const & v1, Color const & clr);
 		virtual ~RenderableLine()
@@ -78,6 +82,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableTriangle : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderableTriangle();
 		RenderableTriangle(float3 const & v0, float3 const & v1, float3 const & v2, Color const & clr);
 		virtual ~RenderableTriangle()
@@ -99,6 +105,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableTriBox : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderableTriBox();
 		RenderableTriBox(OBBox const & obb, Color const & clr);
 		virtual ~RenderableTriBox()
@@ -125,6 +133,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderableLineBox : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		explicit RenderableLineBox();
 		RenderableLineBox(OBBox const & obb, Color const & clr);
 		virtual ~RenderableLineBox()
@@ -151,6 +161,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderablePlane : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderablePlane(float length, float width, int length_segs, int width_segs,
 			bool has_tex_coord, bool has_tangent);
 		virtual ~RenderablePlane()
@@ -161,6 +173,8 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderDecal : public Renderable
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		RenderDecal(TexturePtr const & normal_tex, TexturePtr const & albedo_tex,
 			float3 const & albedo_clr, float metalness, float glossiness);
 

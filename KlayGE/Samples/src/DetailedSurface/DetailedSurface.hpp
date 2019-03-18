@@ -20,7 +20,6 @@ private:
 
 	void InputHandler(KlayGE::InputEngine const & sender, KlayGE::InputAction const & action);
 	void ScaleChangedHandler(KlayGE::UISlider const & sender);
-	void BiasChangedHandler(KlayGE::UISlider const & sender);
 	void DetailTypeChangedHandler(KlayGE::UIComboBox const & sender);
 	void NaLengthHandler(KlayGE::UICheckBox const & sender);
 	void WireframeHandler(KlayGE::UICheckBox const & sender);
@@ -30,8 +29,8 @@ private:
 
 	KlayGE::TrackballCameraController tb_controller_;
 
-	KlayGE::SceneObjectLightSourceProxyPtr light_proxy_;
 	KlayGE::LightSourcePtr light_;
+	KlayGE::SceneNodePtr light_node_;
 
 	KlayGE::JudaTexturePtr juda_tex_;
 

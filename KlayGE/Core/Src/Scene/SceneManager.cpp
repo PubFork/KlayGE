@@ -85,7 +85,6 @@ namespace KlayGE
 		quit_ = true;
 		(*update_thread_)();
 
-		this->ClearLight();
 		this->ClearCamera();
 		this->ClearObject();
 	}
@@ -205,36 +204,29 @@ namespace KlayGE
 		return cameras_[index];
 	}
 
-	void SceneManager::AddLight(LightSourcePtr const & light)
+	uint32_t SceneManager::NumFrameLights() const
 	{
-		lights_.push_back(light);
-	}
-	
-	void SceneManager::DelLight(LightSourcePtr const & light)
-	{
-		auto iter = std::find(lights_.begin(), lights_.end(), light);
-		lights_.erase(iter);
+		return static_cast<uint32_t>(frame_lights_.size());
 	}
 
-	std::vector<LightSourcePtr>::iterator SceneManager::DelLight(std::vector<LightSourcePtr>::iterator iter)
+	LightSource* SceneManager::GetFrameLight(uint32_t index)
 	{
-		std::lock_guard<std::mutex> lock(update_mutex_);
-		return lights_.erase(iter);
+		return frame_lights_[index].first.get();
 	}
 
-	uint32_t SceneManager::NumLights() const
+	LightSource const* SceneManager::GetFrameLight(uint32_t index) const
 	{
-		return static_cast<uint32_t>(lights_.size());
+		return frame_lights_[index].first.get();
 	}
 
-	LightSourcePtr& SceneManager::GetLight(uint32_t index)
+	SceneNode* SceneManager::GetFrameLightNode(uint32_t index)
 	{
-		return lights_[index];
+		return frame_lights_[index].second;
 	}
 
-	LightSourcePtr const & SceneManager::GetLight(uint32_t index) const
+	SceneNode const* SceneManager::GetFrameLightNode(uint32_t index) const
 	{
-		return lights_[index];
+		return frame_lights_[index].second;
 	}
 
 	// 加入渲染队列
@@ -362,11 +354,6 @@ namespace KlayGE
 		cameras_.clear();
 	}
 
-	void SceneManager::ClearLight()
-	{
-		lights_.clear();
-	}
-
 	void SceneManager::ClearObject()
 	{
 		std::lock_guard<std::mutex> lock(update_mutex_);
@@ -400,17 +387,20 @@ namespace KlayGE
 			scene_root_.UpdatePosBoundSubtree();
 
 			overlay_root_.ClearChildren();
-			for (auto iter = lights_.begin(); iter != lights_.end();)
-			{
-				if ((*iter)->Attrib() & LightSource::LSA_Temporary)
+
+			scene_root_.Traverse([this](SceneNode& node) {
+				if (node.Visible())
 				{
-					iter = this->DelLight(iter);
+					node.ForEachComponentOfType<LightSource>([this, &node](LightSource& light) {
+						frame_lights_.push_back({light.shared_from_this(), &node});
+					});
+					return true;
 				}
 				else
 				{
-					++ iter;
+					return false;
 				}
-			}
+			});
 		}
 
 		for (auto const & camera : cameras_)
@@ -418,11 +408,11 @@ namespace KlayGE
 			camera->Update(app_time, frame_time);
 		}
 
-		for (auto const & light : lights_)
+		for (auto const & light : frame_lights_)
 		{
-			if (light->Enabled())
+			if (light.first->Enabled())
 			{
-				light->Update(app_time, frame_time);
+				light.first->Update(*light.second, app_time, frame_time);
 			}
 		}
 
@@ -433,6 +423,8 @@ namespace KlayGE
 
 		InputEngine& ie = Context::Instance().InputFactoryInstance().InputEngineInstance();
 		ie.Update();
+
+		frame_lights_.clear();
 
 		fb.WaitOnSwapBuffers();
 
@@ -539,10 +531,7 @@ namespace KlayGE
 		{
 			if (node->VisibleMark() != BO_No)
 			{
-				node->ForEachRenderable([](Renderable& renderable)
-					{
-						renderable.ClearInstances();
-					});
+				node->ForEachComponentOfType<Renderable>([](Renderable& renderable) { renderable.ClearInstances(); });
 			}
 		}
 
@@ -550,17 +539,16 @@ namespace KlayGE
 		{
 			if (node->VisibleMark() != BO_No)
 			{
-				node->ForEachRenderable([node](Renderable& renderable)
+				node->ForEachComponentOfType<Renderable>([node](Renderable& renderable) {
+					if (renderable.Enabled() && (renderable.GetRenderTechnique() != nullptr))
 					{
-						if (renderable.Enabled() && (renderable.GetRenderTechnique() != nullptr))
+						if (0 == renderable.NumInstances())
 						{
-							if (0 == renderable.NumInstances())
-							{
-								renderable.AddToRenderQueue();
-							}
-							renderable.AddInstance(node);
+							renderable.AddToRenderQueue();
 						}
-					});
+						renderable.AddInstance(node);
+					}
+				});
 
 				++ num_objects_rendered_;
 			}

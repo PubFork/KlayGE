@@ -34,6 +34,7 @@ private:
 	
 	std::vector<KlayGE::SceneNodePtr> scene_objs_;
 	KlayGE::LightSourcePtr light_;
+	KlayGE::SceneNodePtr light_node_;
 
 	KlayGE::ParticleEmitterPtr particle_emitter_;
 	KlayGE::ParticleUpdaterPtr particle_updater_;

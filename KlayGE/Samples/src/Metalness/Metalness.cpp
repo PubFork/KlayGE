@@ -39,25 +39,22 @@ namespace
 	class MetalRenderable : public StaticMesh
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((StaticMesh))
+
 		explicit MetalRenderable(std::wstring_view name)
 			: StaticMesh(name)
 		{
 			effect_ = SyncLoadRenderEffect("Metalness.fxml");
 			technique_ = effect_->TechniqueByName("PBFittingPrefiltered");
 
-			SceneManager& sm = Context::Instance().SceneManagerInstance();
-			for (uint32_t i = 0; i < sm.NumLights(); ++ i)
 			{
-				LightSourcePtr const & light = sm.GetLight(i);
-				if (LightSource::LT_Ambient == light->Type())
-				{
-					*(effect_->ParameterByName("skybox_Ycube_tex")) = light->SkylightTexY();
-					*(effect_->ParameterByName("skybox_Ccube_tex")) = light->SkylightTexC();
+				auto* ambient_light = Context::Instance().SceneManagerInstance().SceneRootNode().FirstComponentOfType<AmbientLightSource>();
 
-					uint32_t const mip = light->SkylightTexY()->NumMipMaps();
-					*(effect_->ParameterByName("diff_spec_mip")) = int2(mip - 1, mip - 2);
-					break;
-				}
+				*(effect_->ParameterByName("skybox_Ycube_tex")) = ambient_light->SkylightTexY();
+				*(effect_->ParameterByName("skybox_Ccube_tex")) = ambient_light->SkylightTexC();
+
+				uint32_t const mip = ambient_light->SkylightTexY()->NumMipMaps();
+				*(effect_->ParameterByName("diff_spec_mip")) = int2(mip - 1, mip - 2);
 			}
 		}
 
@@ -132,12 +129,14 @@ void MetalnessApp::OnCreate()
 	TexturePtr y_cube_map = ASyncLoadTexture("rnl_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
 	TexturePtr c_cube_map = ASyncLoadTexture("rnl_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube_map, c_cube_map);
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
 	sphere_group_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sphere_group_);
+	root_node.AddChild(sphere_group_);
 
 	sphere_group_->OnMainThreadUpdate().Connect([this](float app_time, float elapsed_time)
 		{
@@ -173,7 +172,7 @@ void MetalnessApp::OnCreate()
 
 	single_object_ = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
 	single_object_->TransformToParent(MathLib::scaling(2.0f, 2.0f, 2.0f));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(single_object_);
+	root_node.AddChild(single_object_);
 	single_model_ = ASyncLoadModel("helmet_armet_2.3ds", EAH_GPU_Read | EAH_Immutable,
 		SceneNode::SOA_Cullable,
 		[this](RenderModel& model)
@@ -183,9 +182,9 @@ void MetalnessApp::OnCreate()
 		},
 		CreateModelFactory<RenderModel>, CreateMeshFactory<MetalRenderable>);
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_map, c_cube_map);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto sky_box = MakeSharedPtr<RenderableSkyBox>();
+	sky_box->CompressedCubeMap(y_cube_map, c_cube_map);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(sky_box, SceneNode::SOA_NotCastShadow));
 
 	this->LookAt(float3(0.0f, 0.3f, -0.9f), float3(0, 0, 0));
 	this->Proj(0.05f, 100);

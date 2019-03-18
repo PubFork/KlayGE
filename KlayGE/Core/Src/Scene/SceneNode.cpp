@@ -33,7 +33,6 @@
 #include <KlayGE/SceneManager.hpp>
 #include <KlayGE/Context.hpp>
 #include <KFL/Math.hpp>
-#include <KlayGE/Renderable.hpp>
 
 #include <boost/assert.hpp>
 
@@ -57,14 +56,14 @@ namespace KlayGE
 		name_ = std::wstring(name);
 	}
 
-	SceneNode::SceneNode(RenderablePtr const & renderable, uint32_t attrib)
+	SceneNode::SceneNode(SceneComponentPtr const& component, uint32_t attrib)
 		: SceneNode(attrib)
 	{
-		this->AddRenderable(renderable);
+		this->AddComponent(component);
 	}
 
-	SceneNode::SceneNode(RenderablePtr const & renderable, std::wstring_view name, uint32_t attrib)
-		: SceneNode(renderable, attrib)
+	SceneNode::SceneNode(SceneComponentPtr const& component, std::wstring_view name, uint32_t attrib)
+		: SceneNode(component, attrib)
 	{
 		name_ = std::wstring(name);
 	}
@@ -225,50 +224,64 @@ namespace KlayGE
 		}
 	}
 
-	uint32_t SceneNode::NumRenderables() const
+	uint32_t SceneNode::NumComponents() const
 	{
-		return static_cast<uint32_t>(renderables_.size());
+		return static_cast<uint32_t>(components_.size());
 	}
 
-	RenderablePtr const & SceneNode::GetRenderable() const
+	SceneComponent* SceneNode::FirstComponent()
 	{
-		return this->GetRenderable(0);
+		return this->ComponentByIndex(0);
 	}
 
-	RenderablePtr const & SceneNode::GetRenderable(uint32_t i) const
+	SceneComponent const* SceneNode::FirstComponent() const
 	{
-		return renderables_[i];
+		return this->ComponentByIndex(0);
 	}
 
-	void SceneNode::AddRenderable(RenderablePtr const & renderable)
+	SceneComponent* SceneNode::ComponentByIndex(uint32_t i)
 	{
-		renderables_.push_back(renderable);
+		return components_[i].get();
+	}
+
+	SceneComponent const* SceneNode::ComponentByIndex(uint32_t i) const
+	{
+		return components_[i].get();
+	}
+
+	void SceneNode::AddComponent(SceneComponentPtr const& component)
+	{
+		BOOST_ASSERT(component);
+
+		components_.push_back(component);
 		pos_aabb_dirty_ = true;
 	}
 
-	void SceneNode::DelRenderable(RenderablePtr const & renderable)
+	void SceneNode::RemoveComponent(SceneComponentPtr const& component)
 	{
-		auto iter = std::find(renderables_.begin(), renderables_.end(), renderable);
-		if (iter != renderables_.end())
+		BOOST_ASSERT(component);
+
+		auto iter = std::find(components_.begin(), components_.end(), component);
+		if (iter != components_.end())
 		{
-			renderables_.erase(iter);
+			components_.erase(iter);
 			pos_aabb_dirty_ = true;
 		}
 	}
 
-	void SceneNode::ClearRenderables()
+	void SceneNode::ClearComponents()
 	{
-		renderables_.clear();
+		components_.clear();
 		pos_aabb_dirty_ = true;
 	}
 
-	void SceneNode::ForEachRenderable(std::function<void(Renderable&)> const & callback) const
+	void SceneNode::ForEachComponent(std::function<void(SceneComponent&)> const & callback) const
 	{
-		for (auto const & renderable : renderables_)
+		for (auto const& component : components_)
 		{
-			if (renderable)
+			if (component)
 			{
-				callback(*renderable);
+				callback(*component);
 			}
 		}
 	}
@@ -397,25 +410,20 @@ namespace KlayGE
 
 	void SceneNode::SelectMode(bool select_mode)
 	{
-		for (auto const & renderable : renderables_)
-		{
-			renderable->SelectMode(select_mode);
-		}
+		this->ForEachComponentOfType<Renderable>([select_mode](Renderable& renderable) { renderable.SelectMode(select_mode); });
 	}
 
 	void SceneNode::ObjectID(uint32_t id)
 	{
-		for (auto const & renderable : renderables_)
-		{
-			renderable->ObjectID(id);
-		}
+		this->ForEachComponentOfType<Renderable>([id](Renderable& renderable) { renderable.ObjectID(id); });
 	}
 
 	bool SceneNode::SelectMode() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->SelectMode();
+			return renderable->SelectMode();
 		}
 		else
 		{
@@ -425,10 +433,7 @@ namespace KlayGE
 
 	void SceneNode::Pass(PassType type)
 	{
-		for (auto const & renderable : renderables_)
-		{
-			renderable->Pass(type);
-		}
+		this->ForEachComponentOfType<Renderable>([type](Renderable& renderable) { renderable.Pass(type); });
 
 		if (attrib_ & SOA_NotCastShadow)
 		{
@@ -438,9 +443,10 @@ namespace KlayGE
 
 	bool SceneNode::TransparencyBackFace() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->TransparencyBackFace();
+			return renderable->TransparencyBackFace();
 		}
 		else
 		{
@@ -450,9 +456,10 @@ namespace KlayGE
 
 	bool SceneNode::TransparencyFrontFace() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->TransparencyFrontFace();
+			return renderable->TransparencyFrontFace();
 		}
 		else
 		{
@@ -462,9 +469,10 @@ namespace KlayGE
 
 	bool SceneNode::SSS() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->SSS();
+			return renderable->SSS();
 		}
 		else
 		{
@@ -474,9 +482,10 @@ namespace KlayGE
 
 	bool SceneNode::Reflection() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->Reflection();
+			return renderable->Reflection();
 		}
 		else
 		{
@@ -486,9 +495,10 @@ namespace KlayGE
 
 	bool SceneNode::SimpleForward() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->SimpleForward();
+			return renderable->SimpleForward();
 		}
 		else
 		{
@@ -498,9 +508,10 @@ namespace KlayGE
 
 	bool SceneNode::VDM() const
 	{
-		if (renderables_[0])
+		auto const* renderable = this->FirstComponentOfType<Renderable>();
+		if (renderable != nullptr)
 		{
-			return renderables_[0]->VDM();
+			return renderable->VDM();
 		}
 		else
 		{
@@ -522,12 +533,12 @@ namespace KlayGE
 				pos_aabb_os_->Min() = float3(+1e10f, +1e10f, +1e10f);
 				pos_aabb_os_->Max() = float3(-1e10f, -1e10f, -1e10f);
 
-				if (!renderables_.empty())
+				for (auto const& component : components_)
 				{
-					*pos_aabb_os_ = renderables_[0]->PosBound();
-					for (size_t i = 1; i < renderables_.size(); ++ i)
+					auto const* renderable = boost::typeindex::runtime_cast<Renderable*>(component.get());
+					if (renderable != nullptr)
 					{
-						*pos_aabb_os_ |= renderables_[i]->PosBound();
+						*pos_aabb_os_ |= renderable->PosBound();
 					}
 				}
 

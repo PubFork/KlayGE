@@ -36,6 +36,8 @@ namespace
 	class FlagRenderable : public RenderablePlane
 	{
 	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((Renderable))
+
 		FlagRenderable(int length_segs, int width_segs)
 			: RenderablePlane(static_cast<float>(LENGTH), static_cast<float>(WIDTH), length_segs, width_segs, true, false)
 		{
@@ -105,7 +107,7 @@ void VertexDisplacement::OnCreate()
 		{
 			KFL_UNUSED(elapsed_time);
 
-			checked_pointer_cast<FlagRenderable>(flag_->GetRenderable(0))->SetAngle(app_time / 0.4f);
+			flag_->FirstComponentOfType<FlagRenderable>()->SetAngle(app_time / 0.4f);
 		});
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(flag_);
 

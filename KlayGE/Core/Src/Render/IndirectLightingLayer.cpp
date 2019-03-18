@@ -139,10 +139,10 @@ namespace KlayGE
 		multi_res_layer_->UpdateGBuffer(vp_camera);
 	}
 
-	void MultiResSILLayer::UpdateRSM(Camera const & rsm_camera, LightSource const & light)
+	void MultiResSILLayer::UpdateRSM(Camera const& rsm_camera, LightSource const& light, SceneNode const& light_node)
 	{
 		this->ExtractVPLs(rsm_camera, light);
-		this->VPLsLighting(light);
+		this->VPLsLighting(light, light_node);
 	}
 
 	void MultiResSILLayer::CalcIndirectLighting(TexturePtr const & prev_shading_tex, float4x4 const & proj_to_prev)
@@ -193,14 +193,15 @@ namespace KlayGE
 		rsm_to_vpls_pps_[type]->Apply();
 	}
 
-	void MultiResSILLayer::VPLsLighting(LightSource const & light)
+	void MultiResSILLayer::VPLsLighting(LightSource const& light, SceneNode const& light_node)
 	{
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
 		*vpl_view_param_ = g_buffer_camera_->ViewMatrix();
 		*vpl_proj_param_ = g_buffer_camera_->ProjMatrix();
 
-		float3 p = MathLib::transform_coord(light.Position(), g_buffer_camera_->ViewMatrix());
+		float3 p = MathLib::transform_coord(
+			MathLib::transform_coord(float3(0, 0, 0), light_node.TransformToWorld()), g_buffer_camera_->ViewMatrix());
 		*vpl_light_pos_es_param_ = float4(p.x(), p.y(), p.z(), 1);
 		*vpl_light_color_param_ = light.Color();
 		*vpl_light_falloff_param_ = light.Falloff();
@@ -267,10 +268,11 @@ namespace KlayGE
 		multi_res_layer_->UpdateGBuffer(vp_camera);
 	}
 
-	void SSGILayer::UpdateRSM(Camera const & rsm_camera, LightSource const & light)
+	void SSGILayer::UpdateRSM(Camera const& rsm_camera, LightSource const& light, SceneNode const& light_node)
 	{
 		KFL_UNUSED(rsm_camera);
 		KFL_UNUSED(light);
+		KFL_UNUSED(light_node);
 	}
 
 	void SSGILayer::CalcIndirectLighting(TexturePtr const & prev_shading_tex, float4x4 const & proj_to_prev)

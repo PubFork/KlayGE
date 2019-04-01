@@ -34,20 +34,23 @@ namespace
 	class SpotLightSourceUpdate
 	{
 	public:
-		explicit SpotLightSourceUpdate(float3 const & clr)
-			: random_dis_(0, 1000),
-				color_(clr)
+		explicit SpotLightSourceUpdate(LightSource& light)
+			: light_(light), random_dis_(0, 1000), color_(light.Color())
 		{
 		}
 
-		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
+		void operator()(float app_time, float elapsed_time)
 		{
-			light.Direction(float3(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f),
+			KFL_UNUSED(app_time);
+			KFL_UNUSED(elapsed_time);
+
+			light_.Direction(float3(MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f),
 				1, MathLib::clamp(random_dis_(gen_) * 0.0001f, 0.0f, 0.1f)));
-			light.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));
+			light_.Color(color_ * (0.85f + random_dis_(gen_) * 0.0003f));
 		}
 
 	private:
+		LightSource& light_;
 		ranlux24_base gen_;
 		uniform_int_distribution<> random_dis_;
 		float3 color_;
@@ -56,33 +59,45 @@ namespace
 	class GISpotLightSourceUpdate
 	{
 	public:
-		GISpotLightSourceUpdate()
+		explicit GISpotLightSourceUpdate(LightSource& light)
+			: light_(light)
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(float app_time, float elapsed_time)
 		{
-			light.Direction(float3(sin(app_time) * 0.3f, -1, 0.1f));
+			KFL_UNUSED(elapsed_time);
+
+			light_.Direction(float3(sin(app_time) * 0.3f, -1, 0.1f));
 		}
+
+	private:
+		LightSource& light_;
 	};
 
 	class PointLightSourceUpdate
 	{
 	public:
-		PointLightSourceUpdate(float move_speed, float3 const & pos)
-			: move_speed_(move_speed), pos_(pos)
+		PointLightSourceUpdate(LightSource& light, uint32_t index, uint32_t num_particle_lights)
+			: light_(light), index_(index), num_particle_lights_(num_particle_lights)
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(float app_time, float /*elapsed_time*/)
 		{
-			light.ModelMatrix(MathLib::translation(sin(app_time * 1000 * move_speed_), 0.0f, 0.0f)
-				* MathLib::translation(pos_));
+			float3 clr = MathLib::normalize(float3(sin(app_time * 0.3f + index_ * 10.0f),
+				cos(app_time * 0.2f + 0.5f + index_ * 20.0f),
+				sin(app_time * 0.1f + 1.0f + index_ * 30.0f))) * 0.3f + 0.1f;
+			light_.Color(clr);
+			float factor = (50.0f + app_time * 0.6f) / num_particle_lights_;
+			light_.Position(float3(6.0f * sin(factor * index_),
+				5.0f + 10.0f / num_particle_lights_ * index_, 6.0f * cos(factor * index_) + 1));
 		}
 
 	private:
-		float move_speed_;
-		float3 pos_;
+		LightSource& light_;
+		uint32_t index_;
+		uint32_t num_particle_lights_;
 	};
 
 
@@ -136,6 +151,8 @@ void DeferredRenderingApp::OnCreate()
 
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
@@ -149,7 +166,7 @@ void DeferredRenderingApp::OnCreate()
 	spot_light_[0]->Direction(float3(0, 1, 0));
 	spot_light_[0]->OuterAngle(PI / 2.5f);
 	spot_light_[0]->InnerAngle(PI / 4);
-	spot_light_[0]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[0]->Color()));
+	spot_light_[0]->BindUpdateFunc(SpotLightSourceUpdate(*spot_light_[0]));
 	spot_light_[0]->AddToSceneManager();
 
 	spot_light_[1] = MakeSharedPtr<SpotLightSource>();
@@ -160,7 +177,7 @@ void DeferredRenderingApp::OnCreate()
 	spot_light_[1]->Direction(float3(0, 1, 0));
 	spot_light_[1]->OuterAngle(PI / 2.5f);
 	spot_light_[1]->InnerAngle(PI / 4);
-	spot_light_[1]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[1]->Color()));
+	spot_light_[1]->BindUpdateFunc(SpotLightSourceUpdate(*spot_light_[1]));
 	spot_light_[1]->AddToSceneManager();
 
 	spot_light_[2] = MakeSharedPtr<SpotLightSource>();
@@ -171,7 +188,7 @@ void DeferredRenderingApp::OnCreate()
 	spot_light_[2]->Falloff(float3(1, 0.1f, 0));
 	spot_light_[2]->OuterAngle(PI / 8);
 	spot_light_[2]->InnerAngle(PI / 12);
-	spot_light_[2]->BindUpdateFunc(GISpotLightSourceUpdate());
+	spot_light_[2]->BindUpdateFunc(GISpotLightSourceUpdate(*spot_light_[2]));
 	spot_light_[2]->AddToSceneManager();
 
 	spot_light_src_[0] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[0]);
@@ -179,7 +196,7 @@ void DeferredRenderingApp::OnCreate()
 	spot_light_src_[1] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[1]);
 	spot_light_src_[1]->Scaling(0.1f, 0.1f, 0.1f);
 	spot_light_src_[2] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[2]);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(spot_light_src_[2]->RootNode());
+	root_node.AddChild(spot_light_src_[2]->RootNode());
 
 	fpcController_.Scalers(0.05f, 0.5f);
 
@@ -268,14 +285,14 @@ void DeferredRenderingApp::OnCreate()
 		});
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto skybox = MakeSharedPtr<RenderableSkyBox>();
+	skybox->CompressedCubeMap(y_cube, c_cube);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(skybox, SceneNode::SOA_NotCastShadow));
 
 	ps_ = SyncLoadParticleSystem("Fire.psml");
 	ps_->Gravity(0.5f);
 	ps_->MediaDensity(0.5f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(ps_);
+	root_node.AddChild(ps_);
 
 	float const SCALE = 3;
 	ps_->TransformToParent(MathLib::scaling(SCALE, SCALE, SCALE));
@@ -414,6 +431,12 @@ void DeferredRenderingApp::NumLightsChangedHandler(KlayGE::UISlider const & send
 		scene_mgr.SceneRootNode().AddChild(particle_light_srcs_[i]->RootNode());
 	}
 
+	for (size_t i = 0; i < particle_lights_.size(); ++i)
+	{
+		particle_lights_[i]->BindUpdateFunc(
+			PointLightSourceUpdate(*particle_lights_[i], static_cast<uint32_t>(i), static_cast<uint32_t>(particle_lights_.size())));
+	}
+
 	std::wostringstream stream;
 	stream << L"# lights: " << num_lights;
 	dialog_->Control<UIStatic>(id_num_lights_static_)->SetText(stream.str());
@@ -465,19 +488,5 @@ void DeferredRenderingApp::DoUpdateOverlay()
 
 uint32_t DeferredRenderingApp::DoUpdate(uint32_t pass)
 {
-	if (0 == pass)
-	{
-		for (uint32_t i = 0; i < particle_lights_.size(); ++ i)
-		{
-			float3 clr = MathLib::normalize(float3(sin(this->AppTime() * 0.3f + i * 10.0f),
-				cos(this->AppTime() * 0.2f + 0.5f + i * 20.0f),
-				sin(this->AppTime() * 0.1f + 1.0f + i * 30.0f))) * 0.3f + 0.1f;
-			particle_lights_[i]->Color(clr);
-			float factor = (50.0f + this->AppTime() * 0.6f) / particle_lights_.size();
-			particle_lights_[i]->Position(float3(6.0f * sin(factor * i),
-				5.0f + 10.0f / particle_lights_.size() * i, 6.0f * cos(factor * i) + 1));
-		}
-	}
-
 	return deferred_rendering_->Update(pass);
 }

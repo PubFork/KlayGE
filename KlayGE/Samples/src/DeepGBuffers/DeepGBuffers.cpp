@@ -101,22 +101,23 @@ namespace
 	class SpotLightSourceUpdate
 	{
 	public:
-		explicit SpotLightSourceUpdate(float3 const & pos)
-			: init_pos_(pos)
+		explicit SpotLightSourceUpdate(LightSource& light)
+			: light_(light), init_pos_(light.Position())
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float elapsed_time)
+		void operator()(float app_time, float elapsed_time)
 		{
 			KFL_UNUSED(elapsed_time);
 
 			float3 new_pos = MathLib::transform_coord(float3(init_pos_.x(), 0, init_pos_.z()), MathLib::rotation_y(app_time));
 			new_pos.y() = init_pos_.y();
-			light.Position(new_pos);
-			light.Direction(-new_pos);
+			light_.Position(new_pos);
+			light_.Direction(-new_pos);
 		}
 
 	private:
+		LightSource& light_;
 		float3 init_pos_;
 	};
 
@@ -175,6 +176,8 @@ void DeepGBuffersApp::OnCreate()
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 	deferred_rendering_->SSVOEnabled(0, false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
@@ -188,7 +191,7 @@ void DeepGBuffersApp::OnCreate()
 	spot_light_[0]->Direction(float3(0, 1, 0));
 	spot_light_[0]->OuterAngle(PI / 2.5f);
 	spot_light_[0]->InnerAngle(PI / 4);
-	spot_light_[0]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[0]->Position()));
+	spot_light_[0]->BindUpdateFunc(SpotLightSourceUpdate(*spot_light_[0]));
 	spot_light_[0]->AddToSceneManager();
 
 	spot_light_[1] = MakeSharedPtr<SpotLightSource>();
@@ -199,15 +202,15 @@ void DeepGBuffersApp::OnCreate()
 	spot_light_[1]->Direction(float3(0, 1, 0));
 	spot_light_[1]->OuterAngle(PI / 2.5f);
 	spot_light_[1]->InnerAngle(PI / 4);
-	spot_light_[1]->BindUpdateFunc(SpotLightSourceUpdate(spot_light_[1]->Position()));
+	spot_light_[1]->BindUpdateFunc(SpotLightSourceUpdate(*spot_light_[1]));
 	spot_light_[1]->AddToSceneManager();
 
 	spot_light_src_[0] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[0]);
 	spot_light_src_[0]->Scaling(0.1f, 0.1f, 0.1f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(spot_light_src_[0]->RootNode());
+	root_node.AddChild(spot_light_src_[0]->RootNode());
 	spot_light_src_[1] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[1]);
 	spot_light_src_[1]->Scaling(0.1f, 0.1f, 0.1f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(spot_light_src_[1]->RootNode());
+	root_node.AddChild(spot_light_src_[1]->RootNode());
 
 	fpcController_.Scalers(0.05f, 0.5f);
 
@@ -260,9 +263,9 @@ void DeepGBuffersApp::OnCreate()
 		});
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto skybox = MakeSharedPtr<RenderableSkyBox>();
+	skybox->CompressedCubeMap(y_cube, c_cube);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(skybox, SceneNode::SOA_NotCastShadow));
 }
 
 void DeepGBuffersApp::OnResize(uint32_t width, uint32_t height)

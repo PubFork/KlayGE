@@ -63,7 +63,7 @@ namespace KlayGE
 		enabled_ = enabled;
 	}
 
-	void LightSource::BindUpdateFunc(std::function<void(LightSource&, float, float)> const & update_func)
+	void LightSource::BindUpdateFunc(std::function<void(float, float)> const & update_func)
 	{
 		update_func_ = update_func;
 	}
@@ -72,7 +72,7 @@ namespace KlayGE
 	{
 		if (update_func_)
 		{
-			update_func_(*this, app_time, elapsed_time);
+			update_func_(app_time, elapsed_time);
 		}
 	}
 

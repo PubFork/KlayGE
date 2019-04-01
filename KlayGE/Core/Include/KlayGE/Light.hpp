@@ -58,7 +58,7 @@ namespace KlayGE
 		bool Enabled() const;
 		void Enabled(bool enabled);
 
-		void BindUpdateFunc(std::function<void(LightSource&, float, float)> const & update_func);
+		void BindUpdateFunc(std::function<void(float, float)> const & update_func);
 
 		virtual void Update(float app_time, float elapsed_time);
 
@@ -115,7 +115,7 @@ namespace KlayGE
 		float3 falloff_;
 		float range_;
 
-		std::function<void(LightSource&, float, float)> update_func_;
+		std::function<void(float, float)> update_func_;
 	};
 
 	class KLAYGE_CORE_API AmbientLightSource : public LightSource

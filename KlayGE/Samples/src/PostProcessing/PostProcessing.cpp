@@ -40,11 +40,21 @@ namespace
 	class PointLightSourceUpdate
 	{
 	public:
-		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
+		explicit PointLightSourceUpdate(LightSource& light) : light_(light)
 		{
-			float4x4 inv_view = Context::Instance().AppInstance().ActiveCamera().InverseViewMatrix();
-			light.Position(MathLib::transform_coord(float3(2, 2, -3), inv_view));
 		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(app_time);
+			KFL_UNUSED(elapsed_time);
+
+			float4x4 inv_view = Context::Instance().AppInstance().ActiveCamera().InverseViewMatrix();
+			light_.Position(MathLib::transform_coord(float3(2, 2, -3), inv_view));
+		}
+
+	private:
+		LightSource& light_;
 	};
 
 	enum
@@ -114,13 +124,13 @@ void PostProcessingApp::OnCreate()
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
 	ambient_light->AddToSceneManager();
 
-	point_light_ = MakeSharedPtr<PointLightSource>();
-	point_light_->Attrib(LightSource::LSA_NoShadow);
-	point_light_->Color(float3(18, 18, 18));
-	point_light_->Position(float3(0, 0, 0));
-	point_light_->Falloff(float3(1, 0, 1));
-	point_light_->BindUpdateFunc(PointLightSourceUpdate());
-	point_light_->AddToSceneManager();
+	auto point_light = MakeSharedPtr<PointLightSource>();
+	point_light->Attrib(LightSource::LSA_NoShadow);
+	point_light->Color(float3(18, 18, 18));
+	point_light->Position(float3(0, 0, 0));
+	point_light->Falloff(float3(1, 0, 1));
+	point_light->BindUpdateFunc(PointLightSourceUpdate(*point_light));
+	point_light->AddToSceneManager();
 
 	fpcController_.Scalers(0.05f, 0.1f);
 
@@ -219,9 +229,9 @@ void PostProcessingApp::OnCreate()
 		});
 	this->CartoonHandler(*dialog_->Control<UIRadioButton>(id_cartoon_));
 	
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto skybox = MakeSharedPtr<RenderableSkyBox>();
+	skybox->CompressedCubeMap(y_cube, c_cube);
+	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(MakeSharedPtr<SceneNode>(skybox, SceneNode::SOA_NotCastShadow));
 
 	color_fb_ = rf.MakeFrameBuffer();
 	color_fb_->GetViewport()->camera = re.CurFrameBuffer()->GetViewport()->camera;

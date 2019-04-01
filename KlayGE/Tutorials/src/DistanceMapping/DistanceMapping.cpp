@@ -179,13 +179,22 @@ namespace
 	class PointLightSourceUpdate
 	{
 	public:
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		PointLightSourceUpdate(LightSource& light) : light_(light)
 		{
+		}
+
+		void operator()(float app_time, float elapsed_time)
+		{
+			KFL_UNUSED(elapsed_time);
+
 			float4x4 matRot = MathLib::rotation_z(app_time);
 
 			float3 light_pos(1, 0, -1);
-			light.Position(MathLib::transform_coord(light_pos, matRot));
+			light_.Position(MathLib::transform_coord(light_pos, matRot));
 		}
+
+	private:
+		LightSource& light_;
 	};
 
 
@@ -238,7 +247,7 @@ void DistanceMapping::OnCreate()
 	light_->Color(float3(2, 2, 2));
 	light_->Falloff(float3(1, 0, 1.0f));
 	light_->Position(float3(1, 0, -1));
-	light_->BindUpdateFunc(PointLightSourceUpdate());
+	light_->BindUpdateFunc(PointLightSourceUpdate(*light_));
 	light_->AddToSceneManager();
 
 	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);

@@ -73,12 +73,12 @@ namespace
 	class LightSourceUpdate : public PyScriptUpdate
 	{
 	public:
-		explicit LightSourceUpdate(std::string const & script)
-			: PyScriptUpdate(script)
+		LightSourceUpdate(LightSource& light, std::string const & script)
+			: light_(light), PyScriptUpdate(script)
 		{
 		}
 
-		void operator()(LightSource& light, float app_time, float elapsed_time)
+		void operator()(float app_time, float elapsed_time)
 		{
 			std::any py_ret = this->Run(app_time, elapsed_time);
 			if (std::any_cast<std::vector<std::any>>(&py_ret) != nullptr)
@@ -99,7 +99,7 @@ namespace
 							{
 								light_mat[i] = std::any_cast<float>(mat[i]);
 							}
-							light.ModelMatrix(light_mat);
+							light_.ModelMatrix(light_mat);
 						}
 					}
 				}
@@ -116,7 +116,7 @@ namespace
 							{
 								light_clr[i] = std::any_cast<float>(clr[i]);
 							}
-							light.Color(light_clr);
+							light_.Color(light_clr);
 						}
 					}
 				}				
@@ -133,7 +133,7 @@ namespace
 							{
 								light_fall_off[i] = std::any_cast<float>(fo[i]);
 							}
-							light.Falloff(light_fall_off);
+							light_.Falloff(light_fall_off);
 						}
 					}
 				}
@@ -150,13 +150,16 @@ namespace
 							{
 								light_outer_inner[i] = std::any_cast<float>(oi[i]);
 							}
-							light.OuterAngle(light_outer_inner.x());
-							light.InnerAngle(light_outer_inner.y());
+							light_.OuterAngle(light_outer_inner.x());
+							light_.InnerAngle(light_outer_inner.y());
 						}
 					}
 				}
 			}
 		}
+
+	private:
+		LightSource& light_;
 	};
 
 	class SceneNodeUpdate : public PyScriptUpdate
@@ -335,7 +338,7 @@ void ScenePlayerApp::LoadScene(std::string const & name)
 
 	scene_models_.clear();
 	scene_objs_.clear();
-	sky_box_.reset();
+	skybox_.reset();
 
 	lights_.clear();
 	light_proxies_.clear();
@@ -349,22 +352,22 @@ void ScenePlayerApp::LoadScene(std::string const & name)
 		XMLAttributePtr attr = root->Attrib("skybox");
 		if (attr)
 		{
-			sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
+			skybox_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
 
 			std::string const skybox_name = std::string(attr->ValueString());
 			if (!ResLoader::Instance().Locate(skybox_name).empty())
 			{
-				checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CubeMap(ASyncLoadTexture(skybox_name,
+				checked_pointer_cast<RenderableSkyBox>(skybox_->GetRenderable())->CubeMap(ASyncLoadTexture(skybox_name,
 					EAH_GPU_Read | EAH_Immutable));
 			}
 			else if (!ResLoader::Instance().Locate(skybox_name + ".dds").empty())
 			{
-				checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CubeMap(ASyncLoadTexture(skybox_name + ".dds",
+				checked_pointer_cast<RenderableSkyBox>(skybox_->GetRenderable())->CubeMap(ASyncLoadTexture(skybox_name + ".dds",
 					EAH_GPU_Read | EAH_Immutable));
 			}
 			else if (!ResLoader::Instance().Locate(skybox_name + "_y.dds").empty())
 			{
-				checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(
+				checked_pointer_cast<RenderableSkyBox>(skybox_->GetRenderable())->CompressedCubeMap(
 					ASyncLoadTexture(skybox_name + "_y.dds", EAH_GPU_Read | EAH_Immutable),
 					ASyncLoadTexture(skybox_name + "_c.dds", EAH_GPU_Read | EAH_Immutable));
 			}
@@ -385,11 +388,11 @@ void ScenePlayerApp::LoadScene(std::string const & name)
 					init_data[i].slice_pitch = init_data[i].row_pitch;
 				}
 
-				checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CubeMap(rf.MakeTextureCube(1, 1, 1, fmt, 1, 0,
+				checked_pointer_cast<RenderableSkyBox>(skybox_->GetRenderable())->CubeMap(rf.MakeTextureCube(1, 1, 1, fmt, 1, 0,
 					EAH_GPU_Read | EAH_Immutable, init_data));
 			}
 
-			Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+			Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(skybox_);
 		}
 	}
 
@@ -537,7 +540,7 @@ void ScenePlayerApp::LoadScene(std::string const & name)
 				std::string const update_script = std::string(update_node->ValueString());
 				if (!update_script.empty())
 				{
-					light->BindUpdateFunc(LightSourceUpdate(update_script));
+					light->BindUpdateFunc(LightSourceUpdate(*light, update_script));
 				}
 			}
 		}
